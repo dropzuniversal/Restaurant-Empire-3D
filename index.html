@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Restaurant Empire 3D</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background: #1a1a1a;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      color: #fff;
+    }
+
+    #gameContainer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #ui {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      font-size: 14px;
+      z-index: 100;
+    }
+
+    .hud {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      pointer-events: auto;
+    }
+
+    .stat {
+      background: rgba(0, 0, 0, 0.7);
+      border: 2px solid #4a9eff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      backdrop-filter: blur(8px);
+      font-weight: 600;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      opacity: 0.8;
+      display: block;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    #mainMenu {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #0f3460 0%, #533483 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    #mainMenu.hidden {
+      display: none;
+    }
+
+    .menu-title {
+      font-size: 48px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 20px;
+      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .menu-subtitle {
+      font-size: 16px;
+      opacity: 0.9;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .menu-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: 3px solid #fff;
+      border-radius: 12px;
+      padding: 16px 40px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      min-width: 200px;
+      transition: all 0.3s ease;
+      pointer-events: auto;
+    }
+
+    .menu-button:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .menu-button:active {
+      transform: translateY(-2px);
+    }
+
+    #inputName {
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid #667eea;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      color: #fff;
+      width: 200px;
+      text-align: center;
+    }
+
+    #inputName::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    #roomList {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      max-height: 60vh;
+      overflow-y: auto;
+      width: 100%;
+    }
+
+    .room-card {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid #667eea;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      pointer-events: auto;
+    }
+
+    .room-card:hover {
+      background: rgba(102, 126, 234, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .room-code {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .room-info {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    #gameUI {
+      display: none;
+    }
+
+    #gameUI.active {
+      display: flex;
+    }
+
+    .bottom-controls {
+      margin-top: auto;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      pointer-events: auto;
+    }
+
+    .control-button {
+      background: rgba(0, 0, 0, 0.7);
+      border: 2px solid #4a9eff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .control-button:active {
+      background: rgba(74, 158, 255, 0.3);
+      transform: scale(0.95);
+    }
+
+    .joystick-container {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid #4a9eff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .joystick-knob {
+      width: 60px;
+      height: 60px;
+      background: radial-gradient(circle at 30% 30%, #667eea, #764ba2);
+      border-radius: 50%;
+      position: relative;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .action-buttons {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 50;
+    }
+
+    .action-button {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: 2px solid #fff;
+      color: #fff;
+      font-size: 24px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      pointer-events: auto;
+    }
+
+    .action-button:active {
+      transform: scale(0.9);
+      box-shadow: 0 0 15px rgba(102, 126, 234, 0.6);
+    }
+
+    .chat-box {
+      position: fixed;
+      bottom: 140px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid #4a9eff;
+      border-radius: 8px;
+      padding: 12px;
+      width: 250px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 50;
+      pointer-events: auto;
+    }
+
+    .chat-message {
+      font-size: 12px;
+      margin-bottom: 6px;
+      word-wrap: break-word;
+    }
+
+    .chat-message .player-name {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .loading {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 2000;
+    }
+
+    .loading.hidden {
+      display: none;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(102, 126, 234, 0.3);
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 600px) {
+      .menu-title {
+        font-size: 32px;
+      }
+
+      .menu-button {
+        min-width: 160px;
+        padding: 12px 24px;
+      }
+
+      #roomList {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D Game Container -->
+  <div id="gameContainer"></div>
+
+  <!-- UI Layer -->
+  <div id="ui">
+    <div id="gameUI">
+      <div class="hud">
+        <div class="stat">
+          <span class="stat-label">Level</span>
+          <span class="stat-value" id="levelDisplay">1</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Money</span>
+          <span class="stat-value" id="moneyDisplay">$0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">XP</span>
+          <span class="stat-value" id="xpDisplay">0%</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Customers</span>
+          <span class="stat-value" id="customersDisplay">0/10</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-controls">
+      <button class="control-button" id="pauseBtn">⏸ Pause</button>
+      <button class="control-button" id="leaveBtn">❌ Leave</button>
+    </div>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="mainMenu">
+    <div class="menu-title">🍔 Restaurant Empire 3D</div>
+    <div class="menu-subtitle">Real-time 3D Multiplayer Restaurant Simulator</div>
+    
+    <input type="text" id="inputName" placeholder="Enter your name" maxlength="20">
+    
+    <div id="menuButtons">
+      <button class="menu-button" id="hostBtn">🏠 Host Game</button>
+      <button class="menu-button" id="joinBtn">👥 Join Game</button>
+    </div>
+
+    <div id="roomListContainer" style="display: none; width: 90%; max-width: 600px;">
+      <h3 style="margin-bottom: 16px;">Available Rooms</h3>
+      <div id="roomList"></div>
+      <button class="menu-button" id="backBtn" style="margin-top: 16px;">← Back</button>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <div>Connecting...</div>
+  </div>
+
+  <!-- Mobile Joystick -->
+  <div id="joystickContainer" class="joystick-container" style="display: none;">
+    <div class="joystick-knob"></div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div id="actionButtons" class="action-buttons" style="display: none;">
+    <button class="action-button" id="cookBtn" title="Cook">🍳</button>
+    <button class="action-button" id="serveBtn" title="Serve">🍽️</button>
+    <button class="action-button" id="cleanBtn" title="Clean">🧹</button>
+  </div>
+
+  <!-- Chat Box -->
+  <div id="chatBox" class="chat-box" style="display: none;"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
