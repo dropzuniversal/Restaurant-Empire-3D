@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: restaurant-empire-3d
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        value: /var/data/restaurant_empire.json
+    staticSite:
+      buildDir: ./public
+    disk:
+      name: restaurant_data
+      mountPath: /var/data
+      sizeGB: 1
