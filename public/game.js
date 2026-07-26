@@ -45,6 +45,7 @@ let FLOOR = { minX: -8.4, maxX: 8.4, minZ: -8.2, maxZ: 12.6 };
 let ROOM = { minX: -9.4, maxX: 9.4, minZ: -10.4, maxZ: 13.6 };
 let KZ = -5.2, RANGE = 3.2, SINK = { x: 5.4, z: -7.0 }, BODY_R = 0.62;
 let rangeRing, sinkGlow, sinkWater, plateRack, sinkPile;
+let sinkTimer, sinkTimerCv, sinkTimerTex, lastWashLabel = "";
 
 const M = (c, o = {}) => new THREE.MeshStandardMaterial({
   color: c, roughness: o.rough != null ? o.rough : 0.85, metalness: o.metal || 0,
@@ -91,20 +92,52 @@ function resolveCollision(x, z) {
  * foreshortened depth, plus margin. Recomputed on resize.
  */
 const TILT = 53 * Math.PI / 180;
+
+/** How much of the screen the HUD and the control deck cover. */
+function chromePx() {
+  const bar = $("bar"), hud = $("hud");
+  const barH = bar && bar.offsetHeight ? bar.offsetHeight : 196;
+  const hudR = hud ? hud.getBoundingClientRect() : null;
+  const topH = hudR && hudR.height ? hudR.bottom + 10 : 96;
+  return { top: topH, bottom: barH + 6 };
+}
+
+/**
+ * Frame the WHOLE restaurant inside the part of the screen you can
+ * actually see — i.e. between the HUD and the control deck, not the raw
+ * viewport. Framing to the full canvas hides the back tables behind the
+ * deck, which is exactly the bug this solves.
+ */
 function frameRoom() {
-  camera.aspect = innerWidth / innerHeight;
-  const cx = (ROOM.minX + ROOM.maxX) / 2;
-  const cz = (ROOM.minZ + ROOM.maxZ) / 2;
-  const halfW = (ROOM.maxX - ROOM.minX) / 2;
-  const halfD = (ROOM.maxZ - ROOM.minZ) / 2;
+  const W = innerWidth, H = innerHeight;
+  const c = chromePx();
+  const band = Math.max(200, H - c.top - c.bottom);
+
+  camera.aspect = W / H;
   const vFov = camera.fov * Math.PI / 180;
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
-  const dist = Math.max(halfW / Math.tan(hFov / 2),
-    (halfD * Math.sin(TILT) + 3.4) / Math.tan(vFov / 2)) * 1.1;
-  camera.position.set(cx, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
-  camera.lookAt(cx, 1.2, cz - 0.4);
+  const halfW = (ROOM.maxX - ROOM.minX) / 2;
+  const halfD = (ROOM.maxZ - ROOM.minZ) / 2;
+
+  // the vertical angle we may use shrinks to just the visible band
+  const tanBand = Math.tan(vFov / 2) * (band / H);
+  const needW = halfW / Math.tan(hFov / 2);
+  const needD = (halfD * Math.sin(TILT) + 2.4) / tanBand;
+  const dist = Math.max(needW, needD) * 1.06;
+
+  const cx = (ROOM.minX + ROOM.maxX) / 2;
+  const cz = (ROOM.minZ + ROOM.maxZ) / 2;
+
+  // slide the aim point so the room lands in the band, not the canvas centre
+  const dyPx = (H / 2) - (c.top + band / 2);
+  const worldPerPx = (2 * dist * Math.tan(vFov / 2)) / H;
+  const shift = (dyPx * worldPerPx) / Math.sin(TILT);
+  const tz = cz + shift;
+
+  camera.position.set(cx, dist * Math.sin(TILT), tz + dist * Math.cos(TILT));
+  camera.lookAt(cx, 1.2, tz);
   camera.updateProjectionMatrix();
-  camera.userData.home = { x: camera.position.x, z: camera.position.z, cx, cz };
+  camera.userData.home = { x: camera.position.x, z: camera.position.z, cx, cz: tz };
 }
 
 function initStage() {
@@ -304,7 +337,17 @@ function buildRoom() {
   sinkGlow.rotation.x = -Math.PI / 2;
   sinkGlow.position.set(SINK.x, 0.05, SINK.z);
   r.add(sinkGlow);
-  r.add(labelSprite("PLATES", "rgba(47,158,126,.94)", SINK.x, 4.0, -9.1, 2.4));
+  r.add(labelSprite("PLATES", "rgba(47,158,126,.94)", SINK.x, 4.4, -9.1, 2.4));
+
+  // live wash-up countdown floating over the sink
+  sinkTimerCv = document.createElement("canvas");
+  sinkTimerCv.width = 200; sinkTimerCv.height = 64;
+  sinkTimerTex = new THREE.CanvasTexture(sinkTimerCv);
+  sinkTimer = new THREE.Sprite(new THREE.SpriteMaterial({ map: sinkTimerTex, transparent: true, depthTest: false }));
+  sinkTimer.scale.set(2.9, 0.93, 1);
+  sinkTimer.position.set(SINK.x, 3.55, -9.1);
+  sinkTimer.visible = false;
+  r.add(sinkTimer);
 
   // clean plates stack on the sink's drying board, dirty pile in the basin
   plateRack = new THREE.Group();
@@ -348,6 +391,33 @@ function buildRoom() {
   scene.add(r);
 }
 
+/** Redraw the floating wash-up countdown (only when the number changes). */
+function drawSinkTimer(count, secs, prog) {
+  const label = count + "|" + secs;
+  if (label === lastWashLabel) return;
+  lastWashLabel = label;
+  const g = sinkTimerCv.getContext("2d");
+  g.clearRect(0, 0, 200, 64);
+  g.fillStyle = "rgba(23,17,25,.9)";
+  g.beginPath();
+  if (g.roundRect) g.roundRect(2, 2, 196, 60, 16); else g.rect(2, 2, 196, 60);
+  g.fill();
+  g.strokeStyle = "rgba(159,220,255,.85)"; g.lineWidth = 3; g.stroke();
+  g.fillStyle = "#9fdcff";
+  g.font = "bold 30px system-ui";
+  g.textAlign = "left"; g.textBaseline = "middle";
+  g.fillText("🫧 " + count, 16, 26);
+  g.fillStyle = "#fbf2e4";
+  g.textAlign = "right";
+  g.fillText(secs + "s", 184, 26);
+  // progress rail
+  g.fillStyle = "rgba(251,242,228,.2)";
+  g.fillRect(16, 46, 168, 7);
+  g.fillStyle = "#9fdcff";
+  g.fillRect(16, 46, 168 * prog, 7);
+  sinkTimerTex.needsUpdate = true;
+}
+
 /** The plate stacks you can actually see. */
 function updatePlateVisuals(k) {
   if (!plateRack || !sinkPile) return;
@@ -367,6 +437,14 @@ function updatePlateVisuals(k) {
   }
   if (sinkWater) sinkWater.visible = dirty > 0;
   if (sinkGlow) sinkGlow.material.color.setHex(clean > 0 ? 0x3fc39c : dirty > 0 ? 0x5d9fd8 : 0xd64550);
+
+  if (sinkTimer) {
+    const washing = k.washing || 0;
+    sinkTimer.visible = washing > 0;
+    if (washing > 0) {
+      drawSinkTimer(washing, (k.nextIn != null ? k.nextIn : 0).toFixed(1), k.nextProgress || 0);
+    } else lastWashLabel = "";
+  }
 }
 
 function buildTables() {
@@ -922,8 +1000,16 @@ function renderBar() {
     b.classList.toggle("want", wanted.has(b.dataset.dish) && !st.tray.includes(b.dataset.dish));
   });
 
-  $("handCount").textContent = st.plates + (st.dirty ? " · " + st.dirty + "🫧" : "");
+  $("handCount").textContent = st.plates + (st.dirty ? " · " + st.dirty + "🧺" : "");
   $("hands").classList.toggle("empty", st.plates <= 0);
+
+  const washing = k.washing || 0;
+  $("wash").classList.toggle("on", washing > 0);
+  if (washing > 0) {
+    $("washCount").textContent = washing;
+    $("washTime").textContent = k.nextIn != null ? " · " + k.nextIn.toFixed(1) + "s" : "";
+    $("washFill").style.width = Math.round((k.nextProgress || 0) * 100) + "%";
+  }
 }
 
 function renderHud() {
