@@ -3,7 +3,6 @@
   "version": "2.0.0",
   "description": "Production-quality 3D multiplayer restaurant simulator with 10 progressive restaurants, real-time WebSocket multiplayer, Three.js graphics, and persistent progression system.",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
