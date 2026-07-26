@@ -1,31 +1,18 @@
 {
-  "name": "restaurant-empire-3d",
-  "version": "2.0.0",
-  "description": "Production-quality 3D multiplayer restaurant simulator with 10 progressive restaurants, real-time WebSocket multiplayer, Three.js graphics, and persistent progression system.",
+  "name": "restaurant-empire",
+  "version": "3.0.0",
+  "private": true,
+  "description": "3D multiplayer restaurant game - cook, plate and serve before customers walk out.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test-simulate.js && node test-server.js"
   },
-  "keywords": [
-    "multiplayer",
-    "game",
-    "restaurant",
-    "3d",
-    "three.js",
-    "socket.io",
-    "express"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "express": "^4.19.2",
-    "socket.io": "^4.7.2",
-    "socket.io-client": "^4.7.2"
+    "socket.io": "^4.7.5"
   },
   "engines": {
-    "node": ">=18.x"
-  },
-  "devDependencies": {}
+    "node": "22.x"
+  }
 }
