@@ -202,18 +202,19 @@ function initSocket() {
     console.log("✅ Room created:", data.code);
     gameState.currentRoom = data.code;
     gameState.currentMode = data.mode;
-    gameState.isHost = showLoading(false); // Hide loading!
+    gameState.isHost = true;
+    showLoading(false);
     updateWaitingRoom();
     showScreen("waitingRoom");
     showToast(`✅ Room created: ${data.code}`);
   });
 
-  showLoading(false); // Hide loading!
   gameState.socket.on("room_joined", (data) => {
     console.log("✅ Joined room:", data.code);
     gameState.currentRoom = data.code;
     gameState.currentMode = data.room.mode;
     gameState.isHost = false;
+    showLoading(false);
     updateWaitingRoom();
     showScreen("waitingRoom");
     showToast(`✅ Joined room: ${data.code}`);
@@ -232,9 +233,9 @@ function initSocket() {
     updateRoomList(rooms);
   });
 
-  showLoading(false); // Hide loading!
   gameState.socket.on("game_started", (data) => {
     console.log("🎮 Game started!");
+    showLoading(false);
     gameState.gameActive = true;
     gameState.maxTime = data.gameState.maxTime;
     gameState.gameTime = data.gameState.timeRemaining;
@@ -326,7 +327,7 @@ function updateWaitingRoom() {
     gameState.currentMode === "co-op" ? "🤝 CO-OP" : "⚔️ VERSUS";
 
   const playerListDisplay = document.getElementById("playerListDisplay");
-  playerListDisplay.innerHTML = gameState.players.size > 0 ? "" : "<p style='text-align: center; color: #999;'>Loading players...</p>";
+  playerListDisplay.innerHTML = "";
 
   gameState.players.forEach(player => {
     const isHost = player.id === gameState.socket.id && gameState.isHost;
@@ -374,6 +375,7 @@ function updateRoomList(rooms) {
 
 function joinRoom(roomCode) {
   console.log("Joining room:", roomCode);
+  showLoading(true, "Joining room...");
   gameState.socket.emit("join_room", roomCode);
 }
 
@@ -459,19 +461,19 @@ document.getElementById("confirmModeBtn").addEventListener("click", () => {
   }
   
   console.log("Creating room with mode:", selectedMode, "level:", level);
+  showLoading(true, "Creating room...");
   gameState.socket.emit("create_room", {
     mode: selectedMode,
     level: level
   });
-  showLoading(true, "Creating room...");
 });
 
 // Room buttons
 document.getElementById("startGameBtn").addEventListener("click", () => {
   if (gameState.isHost && gameState.currentRoom) {
     console.log("Starting game...");
-    gameState.socket.emit("start_game", { roomCode: gameState.currentRoom });
     showLoading(true, "Starting game...");
+    gameState.socket.emit("start_game", { roomCode: gameState.currentRoom });
   }
 });
 
@@ -533,7 +535,6 @@ document.getElementById("mainMenuBtn").addEventListener("click", () => {
 });
 
 document.getElementById("refreshBtn").addEventListener("click", () => {
-  // Rooms update automatically via socket
   showToast("🔄 Refreshing rooms...");
 });
 
