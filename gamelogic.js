@@ -4,14 +4,19 @@ const { DISHES, MODIFIERS, UPGRADES, venueForLevel, menuForLevel, rollModifier }
 
 /* ------------------------------------------------------------------ world */
 
+/** Two columns, three rows. Tall and narrow so it frames on a phone. */
 const SEATS = [
-  { x: -8.2, z: 1.2 }, { x: 0, z: 1.2 }, { x: 8.2, z: 1.2 },
-  { x: -8.2, z: 6.6 }, { x: 0, z: 6.6 }, { x: 8.2, z: 6.6 },
+  { x: -4.9, z: 0.2 }, { x: 4.9, z: 0.2 },
+  { x: -4.9, z: 5.0 }, { x: 4.9, z: 5.0 },
+  { x: -4.9, z: 9.8 }, { x: 4.9, z: 9.8 },
 ];
 
-const FLOOR = { minX: -13.5, maxX: 13.5, minZ: -7.2, maxZ: 9.8 };
-const KITCHEN_Z = -4.6;   // stand at or behind this to work the pass
-const SINK = { x: 10.5, z: -6.2 };
+/** The playable box, shipped to the client so it can frame the camera. */
+const ROOM = { minX: -9.4, maxX: 9.4, minZ: -10.4, maxZ: 13.2 };
+
+const FLOOR = { minX: -8.4, maxX: 8.4, minZ: -8.2, maxZ: 12.4 };
+const KITCHEN_Z = -5.2;   // stand at or behind this to work the pass
+const SINK = { x: 6.4, z: -7.2 };
 const SERVE_RANGE = 3.2;
 const BUS_RANGE = 3.2;
 const BODY_R = 0.62;
@@ -23,10 +28,10 @@ const PASS_ACCURACY = 0.7;
 const DIRTY_CARRY = 4;
 
 /** Solid things you can't walk through. Shipped to the client so both agree. */
-const OBSTACLES = SEATS.map((s) => ({ x: s.x, z: s.z, hw: 1.5, hd: 1.5 }))
+const OBSTACLES = SEATS.map((s) => ({ x: s.x, z: s.z, hw: 1.45, hd: 1.45 }))
   .concat([
-    { x: 0, z: -8.9, hw: 11.5, hd: 1.5 },   // kitchen counter
-    { x: 10.5, z: -7.4, hw: 1.7, hd: 0.9 }, // sink unit
+    { x: -2.6, z: -9.6, hw: 5.6, hd: 1.3 },  // kitchen counter (left of the sink gap)
+    { x: 6.4, z: -9.2, hw: 2.2, hd: 1.1 },   // sink unit
   ]);
 
 /* ---------------------------------------------------------------- helpers */
@@ -48,8 +53,8 @@ function tipScale(st) { return 1 + up(st, "charm") * 0.30; }
 function moveScale(st) {
   return st.isHelper ? 0.72 + up(st, "helperSpeed") * 0.20 : 1 + up(st, "shoes") * 0.16;
 }
-function plateStock(upg) { return 8 + ((upg && upg.crockery) || 0) * 3; }
-function washTime(upg) { return 2.4 * Math.pow(0.75, (upg && upg.sink) || 0); }
+function plateStock(upg) { return 4 + ((upg && upg.crockery) || 0) * 2; }
+function washTime(upg) { return 3.0 * Math.pow(0.75, (upg && upg.sink) || 0); }
 
 function patienceForLevel(l) { return Math.max(15, 34 - Math.floor(l / 6) * 2); }
 function concurrentForLevel(l) { return Math.min(SEATS.length, 2 + Math.floor(l / 10)); }
@@ -180,7 +185,7 @@ function makeStation(match, id, owner, upgrades, gender, isHelper) {
       upgrades || {}
     ),
     cooking: [], tray: [], dirty: [],
-    x: isHelper ? 3.2 : 0, z: KITCHEN_Z - 0.9,
+    x: isHelper ? 2.6 : -1.2, z: KITCHEN_Z - 1.2,
     ai: isHelper ? { goal: null, cool: 0 } : null,
   };
   match.owners[id] = owner;
@@ -418,7 +423,7 @@ function helperThink(match, st, dt) {
     const want = mine.find((c) => !st.tray.includes(c.dish) && !st.cooking.some((j) => j.dish === c.dish));
     if (want) {
       if (atStove(st)) { if (!ai.cool) { startCook(match, st.id, want.dish); ai.cool = 0.25; } }
-      else walk(clamp(st.x, -8, 8), KITCHEN_Z - 1);
+      else walk(clamp(st.x, -6, 6), KITCHEN_Z - 1);
       return;
     }
   }
@@ -429,7 +434,7 @@ function helperThink(match, st, dt) {
     return;
   }
 
-  if (st.z > KITCHEN_Z) walk(clamp(st.x, -8, 8), KITCHEN_Z - 1);
+  if (st.z > KITCHEN_Z) walk(clamp(st.x, -6, 6), KITCHEN_Z - 1);
 }
 
 /* -------------------------------------------------------------------- tick */
@@ -538,7 +543,7 @@ function snapshot(match) {
   return {
     level: match.level, mode: match.mode, venue: match.venue,
     menu: match.menu, dishes: match.dishes, modifiers: MODIFIERS,
-    seats: SEATS, obstacles: OBSTACLES, floor: FLOOR,
+    seats: SEATS, obstacles: OBSTACLES, floor: FLOOR, room: ROOM,
     serveRange: SERVE_RANGE, busRange: BUS_RANGE, kitchenZ: KITCHEN_Z,
     sink: SINK, bodyRadius: BODY_R,
     timeRemaining: Math.ceil(match.timeRemaining), maxTime: match.maxTime,
@@ -643,7 +648,7 @@ function shopFor(upgrades) {
 }
 
 module.exports = {
-  DISHES, MODIFIERS, UPGRADES, SEATS, OBSTACLES, FLOOR, KITCHEN_Z, SINK,
+  DISHES, MODIFIERS, UPGRADES, SEATS, OBSTACLES, FLOOR, ROOM, KITCHEN_Z, SINK,
   SERVE_RANGE, BUS_RANGE, BODY_R, DIRTY_CARRY, MAX_WALKOUTS, PASS_ACCURACY,
   createMatch, addPlayer, moveTo, startCook, serve, busTable, dropAtSink, toss,
   setPause, tick, drainEvents, snapshot, results, resolveCollision, stepToward,

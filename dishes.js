@@ -163,7 +163,7 @@ const UPGRADES = {
   chairs: { name: "Comfier Chairs",emoji: "🪑", max: 4, cost: (l) => 260 + l * 300,
             blurb: (l) => `Customers wait ${Math.round((l + 1) * 10)}% longer` },
   crockery:{name: "More Crockery", emoji: "🍶", max: 3, cost: (l) => 340 + l * 400,
-            blurb: (l) => `${8 + (l + 1) * 3} clean plates in service` },
+            blurb: (l) => `${4 + (l + 1) * 2} clean plates in service` },
   sink:   { name: "Faster Sink",   emoji: "🚰", max: 3, cost: (l) => 300 + l * 340,
             blurb: (l) => `Wash-up ${Math.round((1 - Math.pow(0.75, l + 1)) * 100)}% quicker` },
 
