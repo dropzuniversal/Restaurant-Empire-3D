@@ -3,43 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#101d33">
+<meta name="theme-color" content="#0d1a2e">
 <title>Restaurant Empire</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 :root{
-  --ink:#101d33; --ink2:#1b2f4e; --ink3:#26456e;
-  --cream:#fdf7ee; --paper:#fff;
+  --ink:#0d1a2e; --ink2:#182c49; --cream:#fdf7ee; --paper:#fff;
   --tomato:#e5484d; --basil:#2fa88f; --butter:#f2a154; --yolk:#f0c869; --plum:#8b5cf6;
-  --line:rgba(16,29,51,.1);
-  --sh:0 8px 24px rgba(8,16,30,.22);
+  --line:rgba(13,26,46,.1); --sh:0 8px 24px rgba(6,14,26,.24);
   --sb:env(safe-area-inset-bottom,0px); --st:env(safe-area-inset-top,0px);
 }
 html,body{width:100%;height:100%;height:100dvh;overflow:hidden;background:var(--ink);color:var(--ink);
   font-family:ui-rounded,-apple-system,"SF Pro Rounded","Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
-
 #stage{position:fixed;inset:0;z-index:0}
 #stage canvas{display:block;width:100%;height:100%}
 
 .screen{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;
-  padding:calc(18px + var(--st)) 18px calc(18px + var(--sb));
-  background:radial-gradient(120% 90% at 50% 0%,#22406b 0%,#101d33 62%);
+  padding:calc(16px + var(--st)) 16px calc(16px + var(--sb));
+  background:radial-gradient(120% 90% at 50% 0%,#1e3a63 0%,#0d1a2e 62%);
   overflow-y:auto;-webkit-overflow-scrolling:touch}
 .screen.on{display:flex}
-
 /* the match screen must never paint over the 3D world */
 #match{background:none;padding:0;pointer-events:none;overflow:visible}
 #match > *{pointer-events:auto}
 
-h1{font-size:25px;font-weight:800;color:var(--cream);text-align:center;letter-spacing:-.4px}
-.sub{font-size:13px;color:rgba(253,247,238,.62);text-align:center;margin:4px 0 20px}
-.card{background:var(--paper);border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:var(--sh)}
-.label{font-size:11px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:#93a1b5;margin-bottom:8px}
-input{width:100%;padding:14px 15px;border:2px solid var(--line);border-radius:14px;font-size:17px;
+h1{font-size:24px;font-weight:800;color:var(--cream);text-align:center;letter-spacing:-.4px}
+.sub{font-size:13px;color:rgba(253,247,238,.6);text-align:center;margin:4px 0 18px}
+.card{background:var(--paper);border-radius:18px;padding:15px;margin-bottom:11px;box-shadow:var(--sh)}
+.label{font-size:11px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:#93a1b5;margin-bottom:7px}
+input{width:100%;padding:13px 14px;border:2px solid var(--line);border-radius:14px;font-size:17px;
   font-weight:700;font-family:inherit;background:var(--cream);color:var(--ink)}
 input:focus{outline:none;border-color:var(--basil)}
-.btn{display:block;width:100%;padding:16px;border:none;border-radius:16px;font-size:16px;font-weight:800;
-  font-family:inherit;color:#fff;margin-bottom:10px;box-shadow:var(--sh);transition:transform .1s,filter .1s}
+.btn{display:block;width:100%;padding:15px;border:none;border-radius:16px;font-size:16px;font-weight:800;
+  font-family:inherit;color:#fff;margin-bottom:9px;box-shadow:var(--sh);transition:transform .1s,filter .1s}
 .btn:active{transform:scale(.97);filter:brightness(.93)}
 .btn.green{background:linear-gradient(140deg,#2fa88f,#22806c)}
 .btn.red{background:linear-gradient(140deg,#e5484d,#bf2d38)}
@@ -48,147 +44,164 @@ input:focus{outline:none;border-color:var(--basil)}
 .btn.ghost{background:rgba(253,247,238,.09);border:1.5px solid rgba(253,247,238,.22);box-shadow:none}
 .btn[disabled]{opacity:.38}
 
-.modes{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:12px}
-.mode{background:var(--paper);border:3px solid transparent;border-radius:18px;padding:18px 10px;text-align:center;box-shadow:var(--sh)}
-.mode.on{border-color:var(--basil);background:#eefaf7}
-.mode .e{font-size:30px}.mode .n{font-size:14px;font-weight:800;margin-top:5px}
-.mode .d{font-size:11px;color:#93a1b5;margin-top:3px;line-height:1.35}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:11px}
+.pick{background:var(--paper);border:3px solid transparent;border-radius:18px;padding:16px 8px;text-align:center;box-shadow:var(--sh)}
+.pick.on{border-color:var(--basil);background:#eefaf7}
+.pick .e{font-size:28px}.pick .n{font-size:13.5px;font-weight:800;margin-top:4px}
+.pick .d{font-size:11px;color:#93a1b5;margin-top:2px;line-height:1.35}
 
-.row{display:flex;align-items:center;gap:11px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}
 .row:last-child{border-bottom:none}
 .row .who{flex:1;font-weight:700;font-size:15px}
 .pill{background:var(--ink2);color:#fff;font-size:11px;font-weight:800;padding:4px 9px;border-radius:99px}
 .pill.gold{background:var(--butter)}
 
-.roomcard{display:flex;align-items:center;gap:11px;background:var(--paper);border-radius:16px;
-  padding:13px 15px;margin-bottom:9px;box-shadow:var(--sh)}
+.roomcard{display:flex;align-items:center;gap:10px;background:var(--paper);border-radius:16px;
+  padding:12px 14px;margin-bottom:8px;box-shadow:var(--sh)}
 .roomcard .code{font-size:19px;font-weight:900;letter-spacing:2px}
 .roomcard .meta{font-size:12px;color:#93a1b5;margin-top:2px}
 .roomcard button{border:none;background:var(--basil);color:#fff;font-family:inherit;font-weight:800;
-  font-size:13px;padding:10px 17px;border-radius:12px}
-.empty{text-align:center;color:rgba(253,247,238,.5);font-size:14px;padding:26px 0}
+  font-size:13px;padding:10px 16px;border-radius:12px}
+.empty{text-align:center;color:rgba(253,247,238,.5);font-size:14px;padding:24px 0}
 
-.codebox{background:linear-gradient(140deg,var(--yolk),var(--butter));border-radius:18px;padding:14px;
-  text-align:center;margin-bottom:12px;box-shadow:var(--sh)}
-.codebox .c{font-size:40px;font-weight:900;letter-spacing:8px;color:var(--ink)}
-.codebox .t{font-size:11px;font-weight:800;color:rgba(16,29,51,.55);text-transform:uppercase;letter-spacing:1px}
+.codebox{background:linear-gradient(140deg,var(--yolk),var(--butter));border-radius:18px;padding:13px;
+  text-align:center;margin-bottom:11px;box-shadow:var(--sh)}
+.codebox .c{font-size:38px;font-weight:900;letter-spacing:8px;color:var(--ink)}
+.codebox .t{font-size:11px;font-weight:800;color:rgba(13,26,46,.55);text-transform:uppercase;letter-spacing:1px}
+.wallet{display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(240,200,105,.14);
+  border:1.5px solid rgba(240,200,105,.4);border-radius:14px;padding:9px;margin-bottom:11px;
+  color:var(--yolk);font-weight:900;font-size:18px}
 
-.wallet{display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(240,200,105,.14);
-  border:1.5px solid rgba(240,200,105,.4);border-radius:14px;padding:10px;margin-bottom:12px;
-  color:var(--yolk);font-weight:900;font-size:19px}
-
-/* ---------- shop ---------- */
-.shopgrid{display:grid;gap:9px}
-.up{display:flex;align-items:center;gap:12px;background:var(--paper);border-radius:16px;padding:13px;box-shadow:var(--sh)}
-.up .ue{font-size:27px;width:34px;text-align:center}
+.shopgrid{display:grid;gap:8px}
+.up{display:flex;align-items:center;gap:11px;background:var(--paper);border-radius:16px;padding:12px;box-shadow:var(--sh)}
+.up.hire{background:linear-gradient(140deg,#fff8e8,#fff);border:2px solid var(--yolk)}
+.up.locked{opacity:.55}
+.up .ue{font-size:25px;width:32px;text-align:center}
 .up .ub{flex:1;min-width:0}
 .up .un{font-size:14px;font-weight:800}
-.up .ud{font-size:11.5px;color:#93a1b5;margin-top:1px}
+.up .ud{font-size:11.5px;color:#93a1b5;margin-top:1px;line-height:1.3}
 .up .dots{display:flex;gap:3px;margin-top:5px}
-.up .dot{width:16px;height:5px;border-radius:99px;background:var(--line)}
+.up .dot{width:15px;height:5px;border-radius:99px;background:var(--line)}
 .up .dot.f{background:var(--basil)}
-.up button{border:none;border-radius:12px;padding:10px 13px;font-family:inherit;font-weight:800;font-size:12.5px;
-  background:var(--basil);color:#fff;white-space:nowrap;min-width:72px}
+.up button{border:none;border-radius:12px;padding:10px 12px;font-family:inherit;font-weight:800;
+  font-size:12.5px;background:var(--basil);color:#fff;white-space:nowrap;min-width:70px}
 .up button.no{background:#d7dee7;color:#8d9aab}
 .up button.max{background:var(--yolk);color:var(--ink)}
 
-/* ================= MATCH ================= */
-#hud{position:absolute;top:calc(7px + var(--st));left:9px;right:9px;display:grid;
-  grid-template-columns:auto 1fr auto;gap:7px;align-items:stretch}
-.glass{background:rgba(16,29,51,.8);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border:1px solid rgba(253,247,238,.15);border-radius:14px;color:var(--cream)}
-#clock{padding:7px 13px;font-size:23px;font-weight:900;font-variant-numeric:tabular-nums;
-  display:flex;align-items:center;justify-content:center;min-width:68px}
+/* ===================== MATCH HUD ===================== */
+#hud{position:absolute;top:calc(6px + var(--st));left:8px;right:8px;display:grid;
+  grid-template-columns:auto 1fr auto;gap:6px;align-items:stretch}
+.glass{background:rgba(13,26,46,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid rgba(253,247,238,.15);border-radius:13px;color:var(--cream)}
+#clock{padding:6px 12px;font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;justify-content:center;min-width:62px}
 #clock.low{background:rgba(229,72,77,.85);animation:pulse .85s infinite}
 @keyframes pulse{50%{opacity:.6}}
-#venue{padding:6px 10px;text-align:center;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
-#venue .nm{font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#venue .st{font-size:9.5px;opacity:.62;letter-spacing:.4px}
-#score{padding:6px 11px;text-align:right;display:flex;flex-direction:column;justify-content:center;min-width:70px}
-#score .v{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.05}
-#score .l{font-size:9px;opacity:.6;text-transform:uppercase;letter-spacing:.5px}
-#score .tp{font-size:10px;color:var(--yolk);font-weight:800;margin-top:1px}
+#venue{padding:5px 9px;text-align:center;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+#venue .nm{font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#venue .st{font-size:9.5px;opacity:.62}
+#venue .pips{display:flex;gap:3px;justify-content:center;margin-top:3px}
+.pip{width:14px;height:4px;border-radius:99px;background:rgba(253,247,238,.25)}
+.pip.gone{background:var(--tomato)}
+#score{padding:5px 10px;text-align:right;display:flex;flex-direction:column;justify-content:center;min-width:64px}
+#score .v{font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.05}
+#score .l{font-size:8.5px;opacity:.6;text-transform:uppercase;letter-spacing:.5px}
+#score .tp{font-size:10px;color:var(--yolk);font-weight:800}
 
-#board{position:absolute;top:calc(62px + var(--st));left:9px;display:flex;flex-direction:column;gap:3px}
-.sb{display:flex;gap:7px;align-items:center;padding:4px 9px;font-size:11px;font-weight:800;border-radius:9px}
-.sb .n{max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#leftcol{position:absolute;top:calc(58px + var(--st));left:8px;display:flex;flex-direction:column;gap:4px}
+.sb{display:flex;gap:6px;align-items:center;padding:4px 8px;font-size:11px;font-weight:800;border-radius:9px}
+.sb .n{max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb.me{background:rgba(47,168,143,.85)}
+#plates{display:flex;align-items:center;gap:5px;padding:5px 9px;font-size:12px;font-weight:800;border-radius:10px}
+#plates.low{background:rgba(229,72,77,.8)}
 
-#tickets{position:absolute;top:calc(62px + var(--st));right:9px;display:flex;flex-direction:column;gap:6px;
-  max-height:46vh;overflow-y:auto;scrollbar-width:none}
+#tools{position:absolute;top:calc(58px + var(--st));right:8px;display:flex;gap:5px}
+.tool{width:38px;height:38px;border-radius:12px;border:1px solid rgba(253,247,238,.16);
+  background:rgba(13,26,46,.82);color:var(--cream);font-size:16px;font-family:inherit;
+  display:flex;align-items:center;justify-content:center}
+.tool:active{transform:scale(.92)}
+.tool.hot{background:rgba(242,161,84,.9);color:#fff}
+
+#tickets{position:absolute;top:calc(104px + var(--st));right:8px;display:flex;flex-direction:column;
+  gap:5px;max-height:40vh;overflow-y:auto;scrollbar-width:none}
 #tickets::-webkit-scrollbar{display:none}
-.tk{width:66px;background:var(--paper);border-radius:13px;padding:6px 4px 5px;text-align:center;
-  box-shadow:0 5px 16px rgba(0,0,0,.32);position:relative;transition:transform .1s,box-shadow .15s}
+.tk{width:62px;background:var(--paper);border-radius:13px;padding:5px 4px 4px;text-align:center;
+  box-shadow:0 5px 16px rgba(0,0,0,.32);position:relative}
 .tk:active{transform:scale(.93)}
-.tk .sn{font-size:8.5px;font-weight:900;color:#93a1b5;letter-spacing:.4px}
-.tk .dg{font-size:25px;line-height:1.1}
+.tk .sn{font-size:8px;font-weight:900;color:#93a1b5}
+.tk .dg{font-size:23px;line-height:1.1}
 .tk .bar{height:4px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:3px}
 .tk .fill{height:100%;border-radius:99px}
-.tk .bdg{position:absolute;top:-5px;left:-4px;font-size:13px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+.tk .bdg{position:absolute;top:-5px;left:-4px;font-size:12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 .tk.have{outline:2.5px solid var(--yolk)}
 .tk.near{outline:3px solid var(--basil);animation:bob 1s ease-in-out infinite}
 @keyframes bob{50%{transform:translateY(-3px)}}
 
-/* joystick */
-#stick{position:absolute;width:112px;height:112px;border-radius:50%;
-  background:rgba(253,247,238,.1);border:2px solid rgba(253,247,238,.26);
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;pointer-events:none}
+#stick{position:absolute;width:118px;height:118px;border-radius:50%;
+  background:rgba(253,247,238,.1);border:2px solid rgba(253,247,238,.26);display:none;pointer-events:none}
 #stick.on{display:block}
-#knob{position:absolute;width:50px;height:50px;border-radius:50%;left:31px;top:31px;
-  background:rgba(253,247,238,.82);box-shadow:0 3px 12px rgba(0,0,0,.35)}
-#padHint{position:absolute;left:20px;bottom:calc(150px + var(--sb));font-size:11px;font-weight:800;
-  color:rgba(253,247,238,.34);pointer-events:none}
+#knob{position:absolute;width:52px;height:52px;border-radius:50%;left:33px;top:33px;
+  background:rgba(253,247,238,.85);box-shadow:0 3px 12px rgba(0,0,0,.35)}
+#hint{position:absolute;left:18px;bottom:calc(148px + var(--sb));font-size:11px;font-weight:800;
+  color:rgba(253,247,238,.32);pointer-events:none;transition:opacity .4s}
 
-/* bottom kitchen bar */
-#bar{position:absolute;left:0;right:0;bottom:0;padding:9px 10px calc(9px + var(--sb));
-  background:linear-gradient(180deg,rgba(16,29,51,.55),rgba(16,29,51,.94) 34%);
+#bar{position:absolute;left:0;right:0;bottom:0;padding:8px 9px calc(8px + var(--sb));
+  background:linear-gradient(180deg,rgba(13,26,46,.5),rgba(13,26,46,.95) 32%);
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:20px 20px 0 0;
   border-top:1px solid rgba(253,247,238,.13)}
-#topline{display:flex;gap:7px;align-items:center;margin-bottom:8px}
-#stoves{display:flex;gap:5px;flex:1}
-.job{flex:1;height:44px;min-width:48px;border-radius:12px;position:relative;overflow:hidden;
+#topline{display:flex;gap:6px;align-items:center;margin-bottom:7px}
+#stoves{display:flex;gap:4px;flex:1}
+.job{flex:1;height:42px;min-width:44px;border-radius:11px;position:relative;overflow:hidden;
   background:rgba(242,161,84,.14);border:2px solid rgba(242,161,84,.4);
-  display:flex;align-items:center;justify-content:center;color:var(--cream);font-size:11px;font-weight:800}
+  display:flex;align-items:center;justify-content:center;color:var(--cream);font-size:10.5px;font-weight:800}
 .job .jf{position:absolute;left:0;top:0;bottom:0;background:rgba(242,161,84,.5);width:0}
-.job .jt{position:relative;z-index:1;display:flex;align-items:center;gap:4px}
-.job.idle{background:rgba(253,247,238,.05);border-style:dashed;border-color:rgba(253,247,238,.2);color:rgba(253,247,238,.45)}
-#pass{display:flex;gap:5px}
-.slot{width:44px;height:44px;border-radius:12px;border:2px dashed rgba(253,247,238,.22);
-  display:flex;align-items:center;justify-content:center;font-size:23px;background:rgba(253,247,238,.05)}
+.job .jt{position:relative;z-index:1;display:flex;align-items:center;gap:3px}
+.job.idle{background:rgba(253,247,238,.05);border-style:dashed;border-color:rgba(253,247,238,.2);color:rgba(253,247,238,.4)}
+#pass{display:flex;gap:4px}
+.slot{width:42px;height:42px;border-radius:11px;border:2px dashed rgba(253,247,238,.22);
+  display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(253,247,238,.05);position:relative}
 .slot.full{border-style:solid;border-color:var(--basil);background:rgba(47,168,143,.24)}
-#menu{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:1px}
+.slot.full::after{content:"✕";position:absolute;top:-5px;right:-4px;width:17px;height:17px;border-radius:50%;
+  background:var(--tomato);color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center}
+#menu{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}
 #menu::-webkit-scrollbar{display:none}
-.dish{flex:0 0 auto;min-width:60px;background:var(--cream);border:2px solid transparent;border-radius:13px;
-  padding:7px 8px 5px;font-family:inherit;text-align:center;box-shadow:0 4px 11px rgba(0,0,0,.24);transition:transform .1s}
+.dish{flex:0 0 auto;min-width:58px;background:var(--cream);border:2px solid transparent;border-radius:12px;
+  padding:6px 7px 4px;font-family:inherit;text-align:center;box-shadow:0 4px 11px rgba(0,0,0,.24)}
 .dish:active{transform:scale(.92)}
 .dish[disabled]{opacity:.32}
-.dish .e{font-size:22px;line-height:1}
-.dish .n{font-size:9.5px;font-weight:800;color:var(--ink);margin-top:1px}
-.dish .t{font-size:8.5px;color:#93a1b5;font-weight:700}
+.dish .e{font-size:21px;line-height:1}
+.dish .n{font-size:9px;font-weight:800;color:var(--ink);margin-top:1px}
+.dish .t{font-size:8px;color:#93a1b5;font-weight:700}
 .dish.want{border-color:var(--butter);background:#fff6e6}
 
-#quit{position:absolute;top:calc(62px + var(--st));right:82px;width:34px;height:34px;border-radius:11px;
-  border:none;background:rgba(16,29,51,.75);color:rgba(253,247,238,.7);font-size:15px;font-family:inherit}
+#pausedOverlay{position:absolute;inset:0;background:rgba(13,26,46,.72);backdrop-filter:blur(5px);
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:5}
+#pausedOverlay.on{display:flex}
+#pausedOverlay .big{font-size:34px;font-weight:900;color:var(--cream)}
+#pausedOverlay .who{font-size:14px;color:rgba(253,247,238,.65);font-weight:700}
+#resumeBtn{border:none;border-radius:16px;padding:15px 34px;font-family:inherit;font-weight:800;font-size:16px;
+  background:linear-gradient(140deg,#2fa88f,#22806c);color:#fff}
 
-/* results */
-.stars{font-size:38px;text-align:center;letter-spacing:5px;margin:2px 0}
-.bignum{font-size:48px;font-weight:900;text-align:center;line-height:1}
-.statgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
-.stat{background:var(--cream);border-radius:12px;padding:10px 6px;text-align:center}
-.stat .v{font-size:18px;font-weight:900}
-.stat .l{font-size:9px;color:#93a1b5;text-transform:uppercase;font-weight:800;letter-spacing:.4px;margin-top:2px}
-.tipline{text-align:center;color:var(--yolk);font-weight:900;font-size:20px;margin-top:10px}
+.stars{font-size:36px;text-align:center;letter-spacing:5px;margin:2px 0}
+.bignum{font-size:46px;font-weight:900;text-align:center;line-height:1}
+.statgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:11px}
+.stat{background:var(--cream);border-radius:12px;padding:9px 5px;text-align:center}
+.stat .v{font-size:17px;font-weight:900}
+.stat .l{font-size:8.5px;color:#93a1b5;text-transform:uppercase;font-weight:800;margin-top:2px}
+.tipline{text-align:center;color:#c98a1f;font-weight:900;font-size:19px;margin-top:9px}
+.failnote{background:rgba(229,72,77,.12);border:1.5px solid rgba(229,72,77,.35);border-radius:12px;
+  padding:10px;margin-top:10px;font-size:12.5px;color:#a5333a;font-weight:700;text-align:center;line-height:1.45}
 
-#toast{position:fixed;left:50%;top:calc(112px + var(--st));transform:translate(-50%,-8px);
-  background:rgba(16,29,51,.95);color:var(--cream);padding:10px 17px;border-radius:12px;font-size:13.5px;
-  font-weight:800;z-index:90;opacity:0;pointer-events:none;transition:all .2s;max-width:80vw;text-align:center}
+#toast{position:fixed;left:50%;top:calc(150px + var(--st));transform:translate(-50%,-8px);
+  background:rgba(13,26,46,.95);color:var(--cream);padding:10px 16px;border-radius:12px;font-size:13.5px;
+  font-weight:800;z-index:90;opacity:0;pointer-events:none;transition:all .2s;max-width:78vw;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #pops{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden}
-.pop{position:absolute;font-size:19px;font-weight:900;color:#2fa88f;text-shadow:0 2px 8px rgba(0,0,0,.5);
+.pop{position:absolute;font-size:18px;font-weight:900;color:#2fa88f;text-shadow:0 2px 8px rgba(0,0,0,.55);
   animation:rise 1.05s ease-out forwards;white-space:nowrap}
-.pop.bad{color:#e5484d}.pop.tip{color:#f0c869}
+.pop.bad{color:#ff6b70}.pop.tip{color:#f0c869}
 @keyframes rise{0%{opacity:0;transform:translateY(6px) scale(.8)}20%{opacity:1;transform:translateY(0) scale(1.1)}
-  100%{opacity:0;transform:translateY(-50px) scale(1)}}
+  100%{opacity:0;transform:translateY(-48px) scale(1)}}
 
 #boot{position:fixed;inset:0;z-index:95;background:var(--ink);display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:14px}
@@ -204,11 +217,18 @@ input:focus{outline:none;border-color:var(--basil)}
 
 <section id="home" class="screen on">
   <h1>🍔 Restaurant Empire</h1>
-  <p class="sub">Walk the floor. Cook it. Serve it before they walk.</p>
+  <p class="sub">Walk the floor. Cook it. Serve it. Clear it.</p>
   <div class="wallet" id="homeWallet">💰 $0</div>
   <div class="card">
     <div class="label">Your name</div>
     <input id="name" placeholder="Chef" maxlength="16" autocomplete="off">
+  </div>
+  <div class="card">
+    <div class="label">Your chef</div>
+    <div class="two" style="margin:0">
+      <div class="pick on" id="gMale"><div class="e">👨‍🍳</div><div class="n">Male</div></div>
+      <div class="pick" id="gFemale"><div class="e">👩‍🍳</div><div class="n">Female</div></div>
+    </div>
   </div>
   <button class="btn green" id="goHost">🏠 Open a Kitchen</button>
   <button class="btn blue" id="goJoin">👥 Join a Kitchen</button>
@@ -216,10 +236,12 @@ input:focus{outline:none;border-color:var(--basil)}
   <div class="card">
     <div class="label">How it works</div>
     <p style="font-size:13px;line-height:1.65;color:#4a5b73">
-      Drag the <b>left half of the screen</b> to walk. Stand at the pass to
-      <b>cook</b>, then carry the plate to the table and tap the customer to
-      <b>serve</b>. Fast service earns bigger <b>tips</b> — spend them in the
-      shop on stoves, burners, shoes and charm.
+      Drag the <b>left side</b> to walk — you can't walk through tables.
+      Stand at the pass to <b>cook</b> (each dish uses a clean plate), carry it
+      over and tap the customer to <b>serve</b>. When they finish they leave a
+      <b>dirty plate</b> — tap it to collect, then walk it to the <b>sink</b>
+      or you'll run out of crockery. Tap a plate on your pass to <b>bin</b> it.
+      Lose too many customers and the shift is over.
     </p>
   </div>
 </section>
@@ -227,9 +249,9 @@ input:focus{outline:none;border-color:var(--basil)}
 <section id="setup" class="screen">
   <h1>Set the shift</h1>
   <p class="sub">You're the host — you pick how this runs</p>
-  <div class="modes">
-    <div class="mode on" id="mCoop"><div class="e">🤝</div><div class="n">CO-OP</div><div class="d">One kitchen, shared score</div></div>
-    <div class="mode" id="mVersus"><div class="e">⚔️</div><div class="n">VERSUS</div><div class="d">Own tables, highest wins</div></div>
+  <div class="two">
+    <div class="pick on" id="mCoop"><div class="e">🤝</div><div class="n">CO-OP</div><div class="d">Shared kitchen and score</div></div>
+    <div class="pick" id="mVersus"><div class="e">⚔️</div><div class="n">VERSUS</div><div class="d">Own tables, own plates</div></div>
   </div>
   <div class="card">
     <div class="label">Level <span id="lvlCap" style="color:#93a1b5;text-transform:none;letter-spacing:0"></span></div>
@@ -248,7 +270,7 @@ input:focus{outline:none;border-color:var(--basil)}
     <div style="display:flex;gap:8px">
       <input id="codeIn" placeholder="ABCD" maxlength="4" autocapitalize="characters" autocomplete="off"
         style="text-transform:uppercase;letter-spacing:4px;font-weight:900;text-align:center">
-      <button class="btn green" id="codeGo" style="width:auto;padding:14px 20px;margin:0">Go</button>
+      <button class="btn green" id="codeGo" style="width:auto;padding:13px 18px;margin:0">Go</button>
     </div>
   </div>
   <div id="roomList" style="flex:1"></div>
@@ -260,17 +282,14 @@ input:focus{outline:none;border-color:var(--basil)}
   <p class="sub">Tips buy gear. Gear keeps you alive at high levels.</p>
   <div class="wallet" id="shopWallet">💰 $0</div>
   <div class="shopgrid" id="shopGrid"></div>
-  <button class="btn ghost" id="shopBack" style="margin-top:12px">← Back</button>
+  <button class="btn ghost" id="shopBack" style="margin-top:10px">← Back</button>
 </section>
 
 <section id="lobby" class="screen">
   <h1 id="lobbyVenue">Kitchen</h1>
   <p class="sub" id="lobbyMode">—</p>
   <div class="codebox"><div class="t">Room code</div><div class="c" id="lobbyCode">----</div></div>
-  <div class="card">
-    <div class="label">Crew <span id="crewCount"></span></div>
-    <div id="crew"></div>
-  </div>
+  <div class="card"><div class="label">Crew <span id="crewCount"></span></div><div id="crew"></div></div>
   <div id="hostBox"><button class="btn green" id="startBtn">🔥 Start the Shift</button></div>
   <p id="waitNote" class="sub" style="display:none">Waiting for the host…</p>
   <button class="btn gold" id="lobbyShop">🛒 Shop</button>
@@ -280,20 +299,27 @@ input:focus{outline:none;border-color:var(--basil)}
 <section id="match" class="screen">
   <div id="hud">
     <div id="clock" class="glass">0</div>
-    <div id="venue" class="glass"><div class="nm">—</div><div class="st">—</div></div>
+    <div id="venue" class="glass"><div class="nm">—</div><div class="st">—</div><div class="pips"></div></div>
     <div id="score" class="glass"><div class="v">0</div><div class="l">score</div><div class="tp">$0</div></div>
   </div>
-  <div id="board"></div>
-  <button id="quit">✕</button>
+  <div id="leftcol">
+    <div id="plates" class="glass">🍽️ <span id="plateCount">0</span></div>
+  </div>
+  <div id="tools">
+    <button class="tool" id="pauseBtn">⏸</button>
+    <button class="tool" id="quitBtn">✕</button>
+  </div>
   <div id="tickets"></div>
-  <div id="padHint">drag here to walk</div>
+  <div id="hint">drag here to walk</div>
   <div id="stick"><div id="knob"></div></div>
   <div id="bar">
-    <div id="topline">
-      <div id="stoves"></div>
-      <div id="pass"></div>
-    </div>
+    <div id="topline"><div id="stoves"></div><div id="pass"></div></div>
     <div id="menu"></div>
+  </div>
+  <div id="pausedOverlay">
+    <div class="big">⏸ Paused</div>
+    <div class="who" id="pausedBy"></div>
+    <button id="resumeBtn">▶ Resume</button>
   </div>
 </section>
 
@@ -305,17 +331,16 @@ input:focus{outline:none;border-color:var(--basil)}
     <div class="bignum" id="overScore">0</div>
     <div class="statgrid">
       <div class="stat"><div class="v" id="overServed">0</div><div class="l">served</div></div>
-      <div class="stat"><div class="v" id="overMissed">0</div><div class="l">walked</div></div>
+      <div class="stat"><div class="v" id="overWalk">0</div><div class="l">walked out</div></div>
       <div class="stat"><div class="v" id="overCombo">0</div><div class="l">best combo</div></div>
     </div>
     <div class="tipline" id="overTips">💰 +$0 tips</div>
+    <div class="failnote" id="overFail" style="display:none"></div>
   </div>
   <div class="card" id="overBoard" style="display:none">
     <div class="label">Scoreboard</div><div id="overRows"></div>
   </div>
-  <div id="overHost">
-    <button class="btn green" id="nextBtn">▶ Next Level</button>
-  </div>
+  <div id="overHost"><button class="btn green" id="nextBtn">▶ Next Level</button></div>
   <p id="overWait" class="sub" style="display:none">Waiting for the host…</p>
   <button class="btn gold" id="overShop">🛒 Spend Tips</button>
   <button class="btn ghost" id="overHome">🏠 Main Menu</button>
