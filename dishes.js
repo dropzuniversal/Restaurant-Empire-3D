@@ -163,7 +163,7 @@ const UPGRADES = {
   chairs: { name: "Comfier Chairs",emoji: "🪑", max: 4, cost: (l) => 260 + l * 300,
             blurb: (l) => `Customers wait ${Math.round((l + 1) * 10)}% longer` },
   crockery:{name: "More Crockery", emoji: "🍶", max: 3, cost: (l) => 340 + l * 400,
-            blurb: (l) => `${4 + (l + 1) * 2} clean plates in service` },
+            blurb: (l) => `${4 + (l + 1) * 2} plates in the wash-up` },
   sink:   { name: "Faster Sink",   emoji: "🚰", max: 3, cost: (l) => 300 + l * 340,
             blurb: (l) => `Wash-up ${Math.round((1 - Math.pow(0.75, l + 1)) * 100)}% quicker` },
 
@@ -180,12 +180,19 @@ function venueForLevel(level) {
   return VENUES.find((v) => level >= v.from && level <= v.to) || VENUES[0];
 }
 
-/** Menu grows with level inside a venue so early levels aren't overwhelming. */
+/**
+ * The menu grows as you climb a venue, AND rotates, so level 3 and level 7
+ * of the same restaurant aren't serving the identical three dishes.
+ * Deterministic — the same level always gives the same menu.
+ */
 function menuForLevel(level) {
   const v = venueForLevel(level);
-  const within = level - v.from; // 0..9
-  const count = Math.min(v.menu.length, 3 + Math.floor(within / 2));
-  return v.menu.slice(0, count);
+  const n = v.menu.length;
+  const within = level - v.from;                     // 0..9
+  const count = Math.min(n, 3 + Math.floor(within / 2));
+  const rot = (within * 3 + v.id) % n;
+  const rotated = v.menu.slice(rot).concat(v.menu.slice(0, rot));
+  return rotated.slice(0, count);
 }
 
 /** Weighted modifier roll. Higher levels see more exotic orders. */

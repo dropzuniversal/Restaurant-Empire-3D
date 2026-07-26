@@ -384,7 +384,16 @@ io.on("connection", (socket) => {
     const p = players.get(socket.id);
     const room = p && rooms.get(p.room);
     if (!room || !room.match) return;
-    const r = G.busTable(room.match, socket.id, parseInt(d.seat, 10));
+    const r = G.busTable(room.match, socket.id, parseInt(d.table, 10));
+    if (!r.ok) socket.emit("nope", r);
+  });
+
+  /** Grab clean plates off the wash-up rack. */
+  socket.on("plates", () => {
+    const p = players.get(socket.id);
+    const room = p && rooms.get(p.room);
+    if (!room || !room.match) return;
+    const r = G.takePlates(room.match, socket.id);
     if (!r.ok) socket.emit("nope", r);
   });
 
