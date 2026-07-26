@@ -1,674 +1,794 @@
-// ===== GAME STATE =====
-const gameState = {
+"use strict";
+
+/* ============================================================ state ==== */
+
+const S = {
   socket: null,
-  playerId: null,
-  playerName: "",
-  playerLevel: 1,
-  playerMoney: 0,
-  playerXP: 0,
-  currentRoom: null,
-  currentMode: null,
-  currentLevel: 1,
-  gameActive: false,
-  isPaused: false,
+  me: null,
+  name: "",
+  room: null,
   isHost: false,
-  players: new Map(),
-  gameTime: 0,
-  maxTime: 0,
-  teamScore: 0,
-  customersServed: 0,
-  maxCustomers: 0,
-  isMobile: /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent),
-  activeOrders: [],
-  cookingProgress: 0,
-  activeCooking: null,
+  mode: "co-op",
+  level: 1,
+  snap: null,
+  names: {},
+  seenCustomers: new Map(), // id -> 3D group
 };
 
-let scene, camera, renderer, gameLight;
-let playerModel, restaurantGroup;
-let animationFrameId;
-let customers = [];
+const $ = (id) => document.getElementById(id);
 
-// ===== THREE.JS INITIALIZATION =====
-function initThreeJS() {
-  const container = document.getElementById("gameContainer");
+/* ============================================================ screens == */
+
+function screen(id) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("on"));
+  $(id).classList.add("on");
+}
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("on"), 1900);
+}
+
+function pop(text, bad, x, y) {
+  const el = document.createElement("div");
+  el.className = "pop" + (bad ? " bad" : "");
+  el.textContent = text;
+  el.style.left = (x != null ? x : innerWidth / 2 + (Math.random() * 60 - 30)) + "px";
+  el.style.top = (y != null ? y : innerHeight * 0.52) + "px";
+  $("pops").appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+
+/* ============================================================ 3D ======= */
+
+let scene, camera, renderer, raycaster, pointer;
+let customerLayer;
+const SEAT_POS = [
+  { x: -6.2, z: 1.5 }, { x: 0, z: 1.5 }, { x: 6.2, z: 1.5 },
+  { x: -6.2, z: 6.5 }, { x: 0, z: 6.5 }, { x: 6.2, z: 6.5 },
+];
+
+function initStage() {
+  const host = $("stage");
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf5f5dc);
-  scene.fog = new THREE.Fog(0xf5f5dc, 100, 500);
+  scene.background = new THREE.Color(0x1a3050);
+  scene.fog = new THREE.Fog(0x1a3050, 34, 62);
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 3, 10);
-  camera.lookAt(0, 1, 0);
+  camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 200);
+  camera.position.set(0, 12.5, 17);
+  camera.lookAt(0, 0.5, 2.5);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowShadowMap;
-  container.appendChild(renderer.domElement);
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.appendChild(renderer.domElement);
 
-  gameLight = new THREE.DirectionalLight(0xffffff, 1);
-  gameLight.position.set(30, 40, 30);
-  gameLight.castShadow = true;
-  gameLight.shadow.mapSize.width = 2048;
-  gameLight.shadow.mapSize.height = 2048;
-  gameLight.shadow.camera.near = 0.5;
-  gameLight.shadow.camera.far = 500;
-  scene.add(gameLight);
+  scene.add(new THREE.AmbientLight(0xfff2e0, 0.72));
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  scene.add(ambientLight);
+  const key = new THREE.DirectionalLight(0xfff4e2, 0.95);
+  key.position.set(9, 20, 12);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -22;
+  key.shadow.camera.right = 22;
+  key.shadow.camera.top = 22;
+  key.shadow.camera.bottom = -22;
+  scene.add(key);
 
-  // Floor
-  const groundGeometry = new THREE.PlaneGeometry(50, 50);
-  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  ground.position.y = 0;
-  scene.add(ground);
+  const warm = new THREE.PointLight(0xffb457, 0.9, 40);
+  warm.position.set(0, 8, -4);
+  scene.add(warm);
 
-  window.addEventListener("resize", onWindowResize);
+  buildRoom();
 
-  createRestaurant();
-  createPlayer();
+  customerLayer = new THREE.Group();
+  scene.add(customerLayer);
 
-  animate();
-}
+  raycaster = new THREE.Raycaster();
+  pointer = new THREE.Vector2();
+  renderer.domElement.addEventListener("pointerdown", onStageTap);
 
-function createPlayer() {
-  if (playerModel) scene.remove(playerModel);
-
-  playerModel = new THREE.Group();
-
-  // Body
-  const bodyGeometry = new THREE.BoxGeometry(0.6, 1.5, 0.4);
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x3498db, roughness: 0.7 });
-  const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-  body.castShadow = true;
-  body.position.y = 0.75;
-  playerModel.add(body);
-
-  // Head
-  const headGeometry = new THREE.SphereGeometry(0.3, 32, 32);
-  const headMaterial = new THREE.MeshStandardMaterial({ color: 0xf4a460, roughness: 0.8 });
-  const head = new THREE.Mesh(headGeometry, headMaterial);
-  head.castShadow = true;
-  head.position.y = 1.8;
-  playerModel.add(head);
-
-  // Arms
-  const armGeometry = new THREE.BoxGeometry(0.2, 1, 0.2);
-  const armMaterial = new THREE.MeshStandardMaterial({ color: 0xf4a460 });
-  const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-  leftArm.castShadow = true;
-  leftArm.position.set(-0.4, 1.2, 0);
-  playerModel.add(leftArm);
-
-  const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-  rightArm.castShadow = true;
-  rightArm.position.set(0.4, 1.2, 0);
-  playerModel.add(rightArm);
-
-  playerModel.position.set(0, 0, 5);
-  scene.add(playerModel);
-}
-
-function createRestaurant() {
-  if (restaurantGroup) scene.remove(restaurantGroup);
-
-  restaurantGroup = new THREE.Group();
-
-  // Walls
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe8d4a8, roughness: 0.8 });
-
-  // Back wall
-  const backWallGeometry = new THREE.BoxGeometry(30, 8, 0.5);
-  const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
-  backWall.castShadow = true;
-  backWall.position.set(0, 4, -10);
-  restaurantGroup.add(backWall);
-
-  // Left wall
-  const leftWallGeometry = new THREE.BoxGeometry(0.5, 8, 20);
-  const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
-  leftWall.castShadow = true;
-  leftWall.position.set(-15, 4, 0);
-  restaurantGroup.add(leftWall);
-
-  // Right wall
-  const rightWallGeometry = new THREE.BoxGeometry(0.5, 8, 20);
-  const rightWall = new THREE.Mesh(rightWallGeometry, wallMaterial);
-  rightWall.castShadow = true;
-  rightWall.position.set(15, 4, 0);
-  restaurantGroup.add(rightWall);
-
-  // KITCHEN COUNTER
-  const counterGeometry = new THREE.BoxGeometry(12, 1, 2);
-  const counterMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.6 });
-  const counter = new THREE.Mesh(counterGeometry, counterMaterial);
-  counter.castShadow = true;
-  counter.receiveShadow = true;
-  counter.position.set(0, 0.5, -8);
-  restaurantGroup.add(counter);
-
-  // Stoves (cooktops)
-  for (let i = 0; i < 3; i++) {
-    const stoveGeometry = new THREE.BoxGeometry(2, 0.8, 1.5);
-    const stoveMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
-    const stove = new THREE.Mesh(stoveGeometry, stoveMaterial);
-    stove.castShadow = true;
-    stove.position.set(-4 + i * 4, 1, -8);
-    restaurantGroup.add(stove);
-
-    // Burners
-    for (let j = 0; j < 2; j++) {
-      const burnerGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.1, 32);
-      const burnerMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 1 });
-      const burner = new THREE.Mesh(burnerGeometry, burnerMaterial);
-      burner.position.set(-3.5 + i * 4 + j * 0.7, 0.9, -8);
-      restaurantGroup.add(burner);
-    }
-  }
-
-  // Window above counter
-  const windowGeometry = new THREE.BoxGeometry(10, 2, 0.2);
-  const windowMaterial = new THREE.MeshStandardMaterial({ color: 0x87ceeb, metalness: 0.5, roughness: 0.1 });
-  const window = new THREE.Mesh(windowGeometry, windowMaterial);
-  window.position.set(0, 5, -9.8);
-  restaurantGroup.add(window);
-
-  // DINING TABLES
-  for (let i = 0; i < 3; i++) {
-    for (let j = 0; j < 2; j++) {
-      const tableTopGeometry = new THREE.BoxGeometry(2.5, 0.1, 2.5);
-      const tableTopMaterial = new THREE.MeshStandardMaterial({ color: 0xd2691e, roughness: 0.7 });
-      const tableTop = new THREE.Mesh(tableTopGeometry, tableTopMaterial);
-      tableTop.castShadow = true;
-      tableTop.receiveShadow = true;
-      tableTop.position.set(-8 + i * 8, 0.8, 3 + j * 4);
-      restaurantGroup.add(tableTop);
-
-      // Table legs
-      for (let k = 0; k < 4; k++) {
-        const legGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
-        const legMaterial = new THREE.MeshStandardMaterial({ color: 0x654321 });
-        const leg = new THREE.Mesh(legGeometry, legMaterial);
-        leg.castShadow = true;
-        const offset = 0.9;
-        const xOffset = k % 2 === 0 ? -offset : offset;
-        const zOffset = k < 2 ? -offset : offset;
-        leg.position.set(-8 + i * 8 + xOffset, 0.4, 3 + j * 4 + zOffset);
-        restaurantGroup.add(leg);
-      }
-    }
-  }
-
-  // SERVING STATION
-  const servingGeometry = new THREE.BoxGeometry(4, 1.2, 1.5);
-  const servingMaterial = new THREE.MeshStandardMaterial({ color: 0xcd853f, roughness: 0.6 });
-  const servingStation = new THREE.Mesh(servingGeometry, servingMaterial);
-  servingStation.castShadow = true;
-  servingStation.receiveShadow = true;
-  servingStation.position.set(8, 0.6, -8);
-  restaurantGroup.add(servingStation);
-
-  // Sign
-  const signGeometry = new THREE.BoxGeometry(6, 1, 0.2);
-  const signMaterial = new THREE.MeshStandardMaterial({ color: 0xff6347 });
-  const sign = new THREE.Mesh(signGeometry, signMaterial);
-  sign.castShadow = true;
-  sign.position.set(0, 7, -9.8);
-  restaurantGroup.add(sign);
-
-  scene.add(restaurantGroup);
-}
-
-function createCustomers() {
-  // Remove old customers
-  customers.forEach(customer => {
-    if (customer.group) scene.remove(customer.group);
+  addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
   });
-  customers = [];
 
-  // Create new customers at tables
-  const tablePositions = [
-    { x: -8, z: 3 }, { x: 0, z: 3 }, { x: 8, z: 3 },
-    { x: -8, z: 7 }, { x: 0, z: 7 }, { x: 8, z: 7 }
-  ];
-
-  const numCustomers = Math.min(gameState.maxCustomers, tablePositions.length);
-
-  for (let i = 0; i < numCustomers; i++) {
-    const pos = tablePositions[i];
-    const customerGroup = new THREE.Group();
-
-    // Customer body
-    const bodyGeometry = new THREE.BoxGeometry(0.5, 1.2, 0.3);
-    const bodyMaterial = new THREE.MeshStandardMaterial({ 
-      color: new THREE.Color().setHSL(Math.random(), 0.7, 0.5),
-      roughness: 0.7 
-    });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.castShadow = true;
-    body.position.y = 0.6;
-    customerGroup.add(body);
-
-    // Customer head
-    const headGeometry = new THREE.SphereGeometry(0.25, 32, 32);
-    const headMaterial = new THREE.MeshStandardMaterial({ color: 0xf4a460 });
-    const head = new THREE.Mesh(headGeometry, headMaterial);
-    head.castShadow = true;
-    head.position.y = 1.4;
-    customerGroup.add(head);
-
-    customerGroup.position.set(pos.x, 0, pos.z);
-    scene.add(customerGroup);
-
-    customers.push({
-      group: customerGroup,
-      position: pos,
-      id: i,
-      status: 'waiting', // waiting, eating, done
-      served: false,
-      progress: 0
-    });
-  }
+  requestAnimationFrame(loop);
 }
 
-function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+function box(w, h, d, color, x, y, z, opts = {}) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness: opts.rough != null ? opts.rough : 0.85,
+      metalness: opts.metal || 0,
+    })
+  );
+  m.position.set(x, y, z);
+  m.castShadow = opts.cast !== false;
+  m.receiveShadow = true;
+  return m;
 }
 
-function animate() {
-  animationFrameId = requestAnimationFrame(animate);
+function buildRoom() {
+  const room = new THREE.Group();
 
-  if (gameState.gameActive) {
-    // Animate player
-    if (playerModel) {
-      playerModel.position.y = Math.sin(Date.now() * 0.008) * 0.15;
-      playerModel.rotation.y += 0.003;
+  // floor — checkerboard tiles
+  for (let i = -5; i <= 5; i++) {
+    for (let j = -4; j <= 4; j++) {
+      const light = (i + j) % 2 === 0;
+      const t = new THREE.Mesh(
+        new THREE.PlaneGeometry(3, 3),
+        new THREE.MeshStandardMaterial({ color: light ? 0xf2e4cf : 0xd9c3a4, roughness: 0.95 })
+      );
+      t.rotation.x = -Math.PI / 2;
+      t.position.set(i * 3, 0, j * 3);
+      t.receiveShadow = true;
+      room.add(t);
     }
+  }
 
-    // Animate customers
-    customers.forEach((customer, idx) => {
-      if (customer.group) {
-        customer.group.position.y = Math.sin(Date.now() * 0.005 + idx) * 0.1;
-        customer.group.children[1].rotation.y += 0.01;
+  // walls
+  room.add(box(34, 9, 0.6, 0xe8d8bd, 0, 4.5, -11, { cast: false }));
+  room.add(box(0.6, 9, 26, 0xdccbb0, -17, 4.5, 0, { cast: false }));
+  room.add(box(0.6, 9, 26, 0xdccbb0, 17, 4.5, 0, { cast: false }));
+
+  // wainscot stripe
+  room.add(box(34, 1.6, 0.2, 0x2a9d8f, 0, 1.6, -10.65, { cast: false }));
+
+  // ---- kitchen line
+  room.add(box(20, 1.7, 2.4, 0xa9714b, 0, 0.85, -8.4));          // counter body
+  room.add(box(20.6, 0.24, 2.9, 0xf6efe3, 0, 1.8, -8.4, { rough: 0.35 })); // pass top
+
+  for (let i = 0; i < 3; i++) {
+    const x = -6 + i * 6;
+    room.add(box(3.4, 1.5, 2, 0x39424e, x, 0.75, -10, { metal: 0.55, rough: 0.4 })); // range
+    for (let b = 0; b < 2; b++) {
+      const ring = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.42, 0.42, 0.12, 20),
+        new THREE.MeshStandardMaterial({ color: 0x14181d, metalness: 0.9, roughness: 0.3 })
+      );
+      ring.position.set(x - 0.8 + b * 1.6, 1.55, -10);
+      ring.castShadow = true;
+      room.add(ring);
+    }
+    // extractor hood
+    const hood = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.9, 2.5, 1.3, 4),
+      new THREE.MeshStandardMaterial({ color: 0xb9c1c9, metalness: 0.75, roughness: 0.35 })
+    );
+    hood.rotation.y = Math.PI / 4;
+    hood.position.set(x, 5.6, -10);
+    hood.castShadow = true;
+    room.add(hood);
+  }
+
+  // ---- dining tables + chairs
+  SEAT_POS.forEach((p) => {
+    room.add(box(3, 0.22, 3, 0xc9803f, p.x, 1.02, p.z, { rough: 0.6 }));
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.22, 1, 12),
+      new THREE.MeshStandardMaterial({ color: 0x6d4526 })
+    );
+    leg.position.set(p.x, 0.5, p.z);
+    leg.castShadow = true;
+    room.add(leg);
+    room.add(box(2.2, 0.16, 2.2, 0x6d4526, p.x, 0.1, p.z, { cast: false }));
+
+    // chair facing the kitchen
+    room.add(box(1.1, 0.16, 1.1, 0x8c5a34, p.x, 0.72, p.z - 2.1));
+    room.add(box(1.1, 1.1, 0.16, 0x8c5a34, p.x, 1.3, p.z - 2.6));
+  });
+
+  // hanging pendant lamps
+  for (let i = -1; i <= 1; i++) {
+    const shade = new THREE.Mesh(
+      new THREE.ConeGeometry(0.85, 0.9, 18, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xe9c46a, side: THREE.DoubleSide, roughness: 0.5 })
+    );
+    shade.position.set(i * 6.2, 6, 3.8);
+    room.add(shade);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c4 })
+    );
+    bulb.position.set(i * 6.2, 5.6, 3.8);
+    room.add(bulb);
+  }
+
+  scene.add(room);
+}
+
+/* ---- customers ------------------------------------------------------- */
+
+function bubbleSprite(emoji) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.arc(64, 58, 50, 0, Math.PI * 2);
+  g.fillStyle = "rgba(255,255,255,.97)";
+  g.fill();
+  g.moveTo(52, 100); g.lineTo(64, 122); g.lineTo(78, 100);
+  g.fill();
+  g.font = "62px system-ui, apple color emoji, segoe ui emoji";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(emoji, 64, 60);
+
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(1.9, 1.9, 1);
+  return sp;
+}
+
+function makeCustomer(c) {
+  const g = new THREE.Group();
+  const hue = (c.id * 61) % 360;
+  const shirt = new THREE.Color().setHSL(hue / 360, 0.6, 0.55);
+
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.46, 0.58, 1.25, 16),
+    new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.8 })
+  );
+  body.position.y = 1.45;
+  body.castShadow = true;
+  g.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.42, 20, 20),
+    new THREE.MeshStandardMaterial({ color: 0xf0c8a0, roughness: 0.9 })
+  );
+  head.position.y = 2.4;
+  head.castShadow = true;
+  g.add(head);
+
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.44, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    new THREE.MeshStandardMaterial({ color: 0x35251c, roughness: 1 })
+  );
+  hair.position.y = 2.45;
+  g.add(hair);
+
+  const bubble = bubbleSprite(c.emoji);
+  bubble.position.set(0, 3.9, 0);
+  g.add(bubble);
+  g.userData.bubble = bubble;
+
+  // patience ring on the floor
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.78, 1.02, 32),
+    new THREE.MeshBasicMaterial({ color: 0x2a9d8f, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.06;
+  g.add(ring);
+  g.userData.ring = ring;
+
+  const seat = SEAT_POS[c.seat] || SEAT_POS[0];
+  g.position.set(seat.x, 0, seat.z - 2.1);
+  g.userData.customerId = c.id;
+  g.userData.born = performance.now();
+  return g;
+}
+
+function syncCustomers(snap) {
+  const alive = new Set();
+
+  snap.customers.forEach((c) => {
+    alive.add(c.id);
+    let g = S.seenCustomers.get(c.id);
+    if (!g) {
+      g = makeCustomer(c);
+      customerLayer.add(g);
+      S.seenCustomers.set(c.id, g);
+    }
+    g.userData.state = c.state;
+    g.userData.mood = c.mood;
+
+    const ring = g.userData.ring;
+    if (c.state === "waiting") {
+      const col = c.mood > 0.5 ? 0x2a9d8f : c.mood > 0.25 ? 0xe9c46a : 0xe63946;
+      ring.material.color.setHex(col);
+      ring.visible = true;
+      ring.scale.setScalar(Math.max(0.12, c.mood));
+      g.userData.bubble.visible = true;
+    } else if (c.state === "served") {
+      ring.visible = false;
+      g.userData.bubble.visible = false;
+    } else {
+      ring.visible = false;
+      g.userData.bubble.visible = false;
+    }
+  });
+
+  // remove anyone the server dropped
+  S.seenCustomers.forEach((g, id) => {
+    if (!alive.has(id)) {
+      customerLayer.remove(g);
+      S.seenCustomers.delete(id);
+    }
+  });
+}
+
+function clearCustomers() {
+  S.seenCustomers.forEach((g) => customerLayer.remove(g));
+  S.seenCustomers.clear();
+}
+
+function onStageTap(e) {
+  if (!S.snap || S.snap.over) return;
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(customerLayer.children, true);
+  if (!hits.length) return;
+  let o = hits[0].object;
+  while (o && o.userData.customerId === undefined) o = o.parent;
+  if (o && o.userData.state === "waiting") tryServe(o.userData.customerId, e.clientX, e.clientY);
+}
+
+/* ---- render loop ----------------------------------------------------- */
+
+function loop(t) {
+  requestAnimationFrame(loop);
+
+  S.seenCustomers.forEach((g) => {
+    const st = g.userData.state;
+    if (st === "waiting") {
+      const urgency = 1 + (1 - (g.userData.mood || 1)) * 3;
+      g.position.y = Math.sin(t * 0.004 * urgency + g.userData.customerId) * 0.06;
+      if (g.userData.bubble) {
+        g.userData.bubble.position.y = 3.9 + Math.sin(t * 0.003 + g.userData.customerId) * 0.1;
       }
-    });
-
-    // Update camera
-    if (playerModel) {
-      camera.position.x += (playerModel.position.x - camera.position.x) * 0.1;
-      camera.position.y += (3 - camera.position.y) * 0.1;
-      camera.position.z += (playerModel.position.z + 5 - camera.position.z) * 0.1;
-      camera.lookAt(playerModel.position.x, playerModel.position.y + 1.5, playerModel.position.z);
+    } else if (st === "served") {
+      g.position.y = Math.abs(Math.sin(t * 0.012)) * 0.35; // happy hop
+      g.rotation.y = Math.sin(t * 0.008) * 0.3;
+    } else {
+      g.position.y -= 0.03;
+      g.rotation.y += 0.06;
     }
-  }
+  });
 
   renderer.render(scene, camera);
 }
 
-// ===== SOCKET.IO INITIALIZATION =====
-function initSocket() {
-  console.log("🔌 Initializing Socket.IO connection...");
+/* ============================================================ match UI = */
 
-  gameState.socket = io(window.location.origin, {
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    reconnectionAttempts: 5,
-    transports: ["websocket", "polling"],
-    secure: window.location.protocol === "https:",
-  });
+let lastServeAt = 0;
 
-  gameState.socket.on("connect", () => {
-    console.log("✅ Connected to server:", gameState.socket.id);
-    showLoading(false);
-    showToast("✅ Connected!");
-    joinGame();
-  });
+function tryServe(customerId, x, y) {
+  const now = performance.now();
+  if (now - lastServeAt < 120) return;
+  lastServeAt = now;
+  S.socket.emit("serve", { customer: customerId });
+  S._lastTapPos = { x, y };
+}
 
-  gameState.socket.on("connect_error", (error) => {
-    console.error("❌ Connection error:", error);
-    showToast("❌ Connection failed");
-  });
+function myStation() {
+  return (S.snap && S.snap.stations && S.snap.stations[S.me]) || { cooking: null, tray: [] };
+}
 
-  gameState.socket.on("joined", (data) => {
-    gameState.playerId = data.playerId;
-    gameState.playerLevel = data.player?.level || 1;
-    showScreen("mainMenu");
-  });
+function renderTickets() {
+  const wrap = $("tickets");
+  const snap = S.snap;
+  const st = myStation();
 
-  gameState.socket.on("room_created", (data) => {
-    gameState.currentRoom = data.code;
-    gameState.currentMode = data.mode;
-    gameState.isHost = data.isHost;
-    showLoading(false);
-    updateWaitingRoom();
-    showScreen("waitingRoom");
-    showToast(`✅ Room: ${data.code}`);
-  });
+  const mine = snap.customers.filter(
+    (c) => c.state === "waiting" && (snap.mode !== "versus" || !c.owner || c.owner === S.me)
+  );
 
-  gameState.socket.on("room_joined", (data) => {
-    gameState.currentRoom = data.code;
-    gameState.currentMode = data.room.mode;
-    gameState.isHost = data.isHost;
-    showLoading(false);
-    updateWaitingRoom();
-    showScreen("waitingRoom");
-    showToast(`✅ Joined: ${data.code}`);
-  });
-
-  gameState.socket.on("room_updated", (room) => {
-    gameState.players.clear();
-    if (room.players && Array.isArray(room.players)) {
-      room.players.forEach(player => {
-        if (player && player.id) {
-          gameState.players.set(player.id, player);
-        }
+  wrap.innerHTML = "";
+  mine
+    .slice()
+    .sort((a, b) => a.patience - b.patience)
+    .forEach((c) => {
+      const ready = st.tray.includes(c.dish);
+      const el = document.createElement("div");
+      el.className = "ticket" + (ready ? " ready" : "");
+      const col = c.mood > 0.5 ? "#2a9d8f" : c.mood > 0.25 ? "#e9c46a" : "#e63946";
+      el.innerHTML =
+        `<div class="seat">TABLE ${c.seat + 1}</div>` +
+        `<div class="dish">${c.emoji}</div>` +
+        `<div class="bar"><div class="fill" style="width:${Math.round(c.mood * 100)}%;background:${col}"></div></div>`;
+      el.addEventListener("click", (ev) => {
+        const r = el.getBoundingClientRect();
+        tryServe(c.id, r.left + r.width / 2, r.top);
+        ev.stopPropagation();
       });
-    }
-    if (room.isHost !== undefined) {
-      gameState.isHost = room.isHost;
-    }
-    updateWaitingRoom();
-  });
-
-  gameState.socket.on("game_started", (data) => {
-    showLoading(false);
-    gameState.gameActive = true;
-    gameState.maxTime = data.gameState.maxTime;
-    gameState.gameTime = data.gameState.timeRemaining;
-    gameState.maxCustomers = data.gameState.maxCustomers;
-    gameState.teamScore = 0;
-    gameState.customersServed = 0;
-    createCustomers();
-    showScreen("gameScreen");
-    document.getElementById("hud").classList.add("active");
-    document.getElementById("gameUI").classList.add("active");
-    updateGameHUD();
-  });
-
-  gameState.socket.on("game_update", (data) => {
-    gameState.gameTime = data.timeRemaining;
-    gameState.teamScore = data.teamScore;
-    gameState.customersServed = data.customersServed;
-    updateGameHUD();
-  });
-
-  gameState.socket.on("game_ended", (data) => {
-    gameState.gameActive = false;
-    customers.forEach(c => scene.remove(c.group));
-    customers = [];
-    showGameOver(data);
-  });
-
-  gameState.socket.on("player_level_up", (data) => {
-    gameState.playerLevel = data.level;
-    showToast(`🎉 Level ${data.level}!`);
-  });
-
-  gameState.socket.on("room_action", (action) => {
-    if (action.points) {
-      showToast(`✅ +${action.points} pts`);
-    }
-  });
-
-  gameState.socket.on("error", (error) => {
-    showToast("❌ Error");
-  });
-
-  gameState.socket.on("disconnect", () => {
-    showToast("⚠️ Disconnected");
-  });
-}
-
-function joinGame() {
-  gameState.socket.emit("join_game", {
-    name: gameState.playerName || "Guest",
-    level: gameState.playerLevel,
-    xp: 0,
-    money: 0,
-  });
-}
-
-// ===== UI FUNCTIONS =====
-function showScreen(screenName) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  const screen = document.getElementById(screenName);
-  if (screen) screen.classList.add("active");
-}
-
-function showLoading(show, text = "Connecting...") {
-  const loading = document.getElementById("loading");
-  if (show) {
-    loading.classList.add("active");
-    document.getElementById("loadingText").textContent = text;
-  } else {
-    loading.classList.remove("active");
-  }
-}
-
-function showToast(message) {
-  const toast = document.getElementById("toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  setTimeout(() => toast.classList.remove("show"), 2000);
-}
-
-function updateWaitingRoom() {
-  document.getElementById("roomCodeDisplay").textContent = `Room: ${gameState.currentRoom}`;
-  document.getElementById("modeDisplay").textContent = gameState.currentMode === "co-op" ? "🤝 CO-OP" : "⚔️ VERSUS";
-
-  const playerListDisplay = document.getElementById("playerListDisplay");
-  playerListDisplay.innerHTML = "";
-
-  gameState.players.forEach(player => {
-    if (!player) return;
-    const playerEl = document.createElement("div");
-    playerEl.className = "player-item";
-    const icon = gameState.isHost ? "👑" : "👤";
-    playerEl.innerHTML = `
-      <div class="player-icon">${icon}</div>
-      <div class="player-name">${player.name || "Guest"}</div>
-      <div class="player-level">Lvl ${player.level || 1}</div>
-    `;
-    playerListDisplay.appendChild(playerEl);
-  });
-
-  const startBtn = document.getElementById("startGameBtn");
-  if (startBtn) {
-    startBtn.style.display = gameState.isHost ? "block" : "none";
-  }
-}
-
-function updateRoomList(rooms) {
-  const roomList = document.getElementById("roomList");
-
-  if (rooms.length === 0) {
-    roomList.innerHTML = '<div class="card" style="text-align: center; color: #999;">No rooms available</div>';
-    return;
-  }
-
-  roomList.innerHTML = "";
-  rooms.forEach(room => {
-    const card = document.createElement("div");
-    card.className = "room-card";
-    card.innerHTML = `
-      <div class="room-info">
-        <div class="room-code">${room.code}</div>
-        <div class="room-details">${room.mode === "co-op" ? "🤝" : "⚔️"} ${room.players}/4 • Lvl ${room.level}</div>
-      </div>
-      <button class="room-action">JOIN</button>
-    `;
-    card.querySelector(".room-action").addEventListener("click", () => {
-      showLoading(true, "Joining...");
-      gameState.socket.emit("join_room", room.code);
+      wrap.appendChild(el);
     });
-    roomList.appendChild(card);
+
+  if (!mine.length) {
+    const el = document.createElement("div");
+    el.style.cssText = "color:rgba(253,246,236,.55);font-size:12px;font-weight:700;padding:14px 6px";
+    el.textContent = snap.over ? "Service closed" : "No one waiting — prep ahead!";
+    wrap.appendChild(el);
+  }
+}
+
+function renderKitchen() {
+  const snap = S.snap;
+  const st = myStation();
+
+  // stove
+  const fill = $("stoveFill");
+  const txt = $("stoveTxt");
+  if (st.cooking) {
+    fill.style.width = Math.round(st.cooking.progress * 100) + "%";
+    txt.innerHTML = `<span style="font-size:19px">${st.cooking.emoji}</span> ${st.cooking.remaining.toFixed(1)}s`;
+  } else {
+    fill.style.width = "0%";
+    txt.textContent = st.tray.length >= snap.trayCapacity ? "Pass full!" : "Stove free";
+  }
+
+  // pass slots
+  for (let i = 0; i < 3; i++) {
+    const slot = document.querySelector(`.slot[data-slot="${i}"]`);
+    const dish = st.tray[i];
+    if (dish) {
+      slot.classList.add("full");
+      slot.textContent = snap.dishes[dish].emoji;
+    } else {
+      slot.classList.remove("full");
+      slot.textContent = "";
+    }
+  }
+
+  // menu buttons
+  const menu = $("menu");
+  const wanted = new Set(
+    snap.customers
+      .filter((c) => c.state === "waiting" && (snap.mode !== "versus" || !c.owner || c.owner === S.me))
+      .map((c) => c.dish)
+  );
+  const held = new Set(st.tray);
+  const blocked = !!st.cooking || st.tray.length >= snap.trayCapacity || snap.over;
+
+  if (menu.dataset.built !== snap.menu.join(",")) {
+    menu.dataset.built = snap.menu.join(",");
+    menu.innerHTML = "";
+    snap.menu.forEach((id) => {
+      const d = snap.dishes[id];
+      const b = document.createElement("button");
+      b.className = "dish";
+      b.dataset.dish = id;
+      b.innerHTML = `<div class="e">${d.emoji}</div><div class="n">${d.name}</div><div class="t">${d.cookTime}s</div>`;
+      b.addEventListener("click", () => {
+        S.socket.emit("cook", { dish: id });
+        b.style.transform = "scale(.9)";
+        setTimeout(() => (b.style.transform = ""), 110);
+      });
+      menu.appendChild(b);
+    });
+  }
+  menu.querySelectorAll(".dish").forEach((b) => {
+    const id = b.dataset.dish;
+    b.disabled = blocked;
+    b.classList.toggle("wanted", wanted.has(id) && !held.has(id));
   });
 }
 
-function updateGameHUD() {
-  document.getElementById("hudLevel").textContent = gameState.playerLevel;
-  document.getElementById("hudScore").textContent = gameState.teamScore;
-  document.getElementById("hudCustomers").textContent = `${gameState.customersServed}/${gameState.maxCustomers}`;
-  document.getElementById("hudTime").textContent = gameState.gameTime;
-  document.getElementById("gameTimer").textContent = gameState.gameTime;
+function renderHud() {
+  const snap = S.snap;
+  const clock = $("clock");
+  clock.textContent = snap.timeRemaining;
+  clock.classList.toggle("low", snap.timeRemaining <= 15);
+
+  $("venue").querySelector(".nm").textContent = `${snap.restaurant.emoji} ${snap.restaurant.name}`;
+  $("venue").querySelector(".st").textContent =
+    `LVL ${snap.level} · ${snap.served}/${snap.totalCustomers} SERVED`;
+
+  const mine = snap.scores[S.me] || 0;
+  const shown = snap.mode === "versus" ? mine : Object.values(snap.scores).reduce((a, b) => a + b, 0);
+  $("score").querySelector(".v").textContent = shown;
+  $("score").querySelector(".l").textContent = snap.mode === "versus" ? "you" : "team";
+
+  const board = $("scoreboard");
+  const ids = Object.keys(snap.scores);
+  if (ids.length > 1) {
+    board.innerHTML = "";
+    ids
+      .slice()
+      .sort((a, b) => snap.scores[b] - snap.scores[a])
+      .forEach((id) => {
+        const row = document.createElement("div");
+        row.className = "sb glass" + (id === S.me ? " me" : "");
+        const combo = snap.combos && snap.combos[id] > 1 ? ` 🔥${snap.combos[id]}` : "";
+        row.innerHTML = `<span class="n">${S.names[id] || "Cook"}</span><span class="s">${snap.scores[id]}${combo}</span>`;
+        board.appendChild(row);
+      });
+  } else {
+    board.innerHTML = "";
+  }
 }
 
-function showGameOver(data) {
-  document.getElementById("finalScore").textContent = data.teamScore;
-  const resultsCard = document.getElementById("resultsCard");
-  let html = `<div class="score-label">Final Results</div><div style="margin: 12px 0;"><p style="font-size: 14px; font-weight: 600;">Customers: ${data.customersServed}/${data.customersServed + (data.maxCustomers - data.customersServed)}</p>`;
-  if (data.mode === "versus" && data.winner) {
-    html += `<p style="color: var(--primary); font-weight: 600;">🏆 ${data.winner}</p>`;
-  }
-  html += `</div>`;
-  resultsCard.innerHTML = html;
-  document.getElementById("hud").classList.remove("active");
-  document.getElementById("gameUI").classList.remove("active");
-  showScreen("gameOverScreen");
+function applyEvents(events) {
+  events.forEach((e) => {
+    if (e.type === "served" && e.playerId === S.me) {
+      const p = S._lastTapPos;
+      pop(`+${e.points}`, false, p && p.x, p && p.y);
+      if (e.combo > 1) toast(`🔥 ${e.combo} in a row!`);
+    } else if (e.type === "served") {
+      pop(`+${e.points}`, false);
+    } else if (e.type === "walked_out") {
+      pop("walked out", true);
+    } else if (e.type === "plated" && e.playerId === S.me) {
+      // subtle: the pass slot lighting up is feedback enough
+    } else if (e.type === "burned" && e.playerId === S.me) {
+      toast("🔥 Pass was full — dish binned");
+    }
+  });
 }
 
-// ===== EVENT LISTENERS =====
-document.getElementById("playerName").addEventListener("keyup", (e) => {
-  gameState.playerName = e.target.value || "Guest";
-});
+/* ============================================================ lobby UI = */
 
-document.getElementById("hostBtn").addEventListener("click", () => {
-  if (!gameState.playerName) {
-    showToast("⚠️ Enter name");
-    return;
-  }
-  showScreen("modeScreen");
-});
+function renderLobby(d) {
+  S.room = d.code;
+  S.mode = d.mode;
+  S.level = d.level;
+  S.isHost = d.youAreHost;
 
-document.getElementById("joinBtn").addEventListener("click", () => {
-  if (!gameState.playerName) {
-    showToast("⚠️ Enter name");
-    return;
-  }
-  showScreen("browserScreen");
-});
+  $("lobbyCode").textContent = d.code;
+  $("lobbyMode").textContent =
+    (d.mode === "versus" ? "⚔️ Versus" : "🤝 Co-op") + ` · Level ${d.level}`;
+  $("lobbyVenue").textContent = "Kitchen ready";
 
-document.getElementById("backToMenuBtn").addEventListener("click", () => showScreen("mainMenu"));
-document.getElementById("backFromBrowserBtn").addEventListener("click", () => showScreen("mainMenu"));
-
-let selectedMode = "co-op";
-document.getElementById("coopMode").addEventListener("click", () => {
-  selectedMode = "co-op";
-  document.getElementById("coopMode").classList.add("selected");
-  document.getElementById("versusMode").classList.remove("selected");
-});
-
-document.getElementById("versusMode").addEventListener("click", () => {
-  selectedMode = "versus";
-  document.getElementById("versusMode").classList.add("selected");
-  document.getElementById("coopMode").classList.remove("selected");
-});
-
-document.getElementById("confirmModeBtn").addEventListener("click", () => {
-  const level = parseInt(document.getElementById("levelInput").value) || 1;
-  if (level < 1 || level > 100) {
-    showToast("⚠️ Level 1-100");
-    return;
-  }
-  showLoading(true, "Creating...");
-  gameState.socket.emit("create_room", { mode: selectedMode, level: level });
-});
-
-document.getElementById("startGameBtn").addEventListener("click", () => {
-  if (gameState.isHost && gameState.currentRoom) {
-    showLoading(true, "Starting...");
-    gameState.socket.emit("start_game", { roomCode: gameState.currentRoom });
-  }
-});
-
-document.getElementById("leaveRoomBtn").addEventListener("click", () => {
-  if (gameState.currentRoom) {
-    gameState.socket.emit("leave_room", gameState.currentRoom);
-    gameState.currentRoom = null;
-    showScreen("mainMenu");
-  }
-});
-
-// GAME BUTTONS
-document.getElementById("cookBtn").addEventListener("click", () => {
-  if (!gameState.gameActive || gameState.isPaused) return;
-  
-  gameState.socket.emit("player_action", {
-    roomCode: gameState.currentRoom,
-    type: "complete_order",
-    recipe: "burger"
+  $("crewCount").textContent = `(${d.players.length}/4)`;
+  const crew = $("crew");
+  crew.innerHTML = "";
+  d.players.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const isHost = p.id === d.hostId;
+    row.innerHTML =
+      `<span style="font-size:22px">${isHost ? "👑" : "👤"}</span>` +
+      `<span class="who">${escapeHtml(p.name)}${p.id === S.me ? " (you)" : ""}</span>` +
+      `<span class="pill${isHost ? " host" : ""}">Lv ${p.level}</span>`;
+    crew.appendChild(row);
   });
-  
-  // Visual feedback
-  document.getElementById("cookBtn").style.transform = "scale(0.95)";
-  setTimeout(() => document.getElementById("cookBtn").style.transform = "scale(1)", 100);
-  showToast("🍳 Cooking!");
-});
 
-document.getElementById("serveBtn").addEventListener("click", () => {
-  if (!gameState.gameActive || gameState.isPaused) return;
-  
-  gameState.socket.emit("player_action", {
-    roomCode: gameState.currentRoom,
-    type: "complete_order",
-    recipe: "fries"
-  });
-  
-  document.getElementById("serveBtn").style.transform = "scale(0.95)";
-  setTimeout(() => document.getElementById("serveBtn").style.transform = "scale(1)", 100);
-  showToast("🍽️ Served!");
-});
+  $("hostBox").style.display = d.youAreHost ? "block" : "none";
+  $("waitNote").style.display = d.youAreHost ? "none" : "block";
+}
 
-document.getElementById("pauseBtn").addEventListener("click", () => {
-  gameState.isPaused = !gameState.isPaused;
-  const btn = document.getElementById("pauseBtn");
-  btn.innerHTML = gameState.isPaused ? "▶ RESUME" : "⏸ PAUSE";
-  btn.style.opacity = gameState.isPaused ? "0.6" : "1";
-  showToast(gameState.isPaused ? "⏸ Paused" : "▶ Resumed");
-});
-
-document.getElementById("leaveGameBtn").addEventListener("click", () => {
-  if (confirm("Leave game?")) {
-    gameState.gameActive = false;
-    gameState.socket.emit("leave_room", gameState.currentRoom);
-    gameState.currentRoom = null;
-    showScreen("mainMenu");
+function renderRooms(list) {
+  const box = $("roomList");
+  if (!list.length) {
+    box.innerHTML = '<div class="empty">No open kitchens right now.<br>Open your own!</div>';
+    return;
   }
-});
+  box.innerHTML = "";
+  list.forEach((r) => {
+    const el = document.createElement("div");
+    el.className = "roomcard";
+    el.innerHTML =
+      `<div style="flex:1"><div class="code">${r.code}</div>` +
+      `<div class="meta">${r.mode === "versus" ? "⚔️ Versus" : "🤝 Co-op"} · Lv ${r.level} · ${r.players}/${r.maxPlayers} · ${escapeHtml(r.host)}</div></div>` +
+      `<button>Join</button>`;
+    el.querySelector("button").addEventListener("click", () =>
+      S.socket.emit("join_room", { code: r.code })
+    );
+    box.appendChild(el);
+  });
+}
 
-document.getElementById("playAgainBtn").addEventListener("click", () => {
-  showScreen("waitingRoom");
-});
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
 
-document.getElementById("mainMenuBtn").addEventListener("click", () => {
-  gameState.currentRoom = null;
-  gameState.isHost = false;
-  showScreen("mainMenu");
-});
+function showResults(d) {
+  const r = d.results;
+  const mine = r.scores[S.me] || 0;
 
-document.getElementById("refreshBtn").addEventListener("click", () => {
-  showToast("🔄 Refreshing...");
-});
+  $("overStars").textContent = "★".repeat(r.stars) + "☆".repeat(3 - r.stars);
+  $("overServed").textContent = `${r.served}/${r.totalCustomers}`;
+  $("overMissed").textContent = r.missed;
 
-// ===== INIT =====
-window.addEventListener("load", () => {
-  showLoading(true, "Loading...");
-  initThreeJS();
-  initSocket();
-});
+  if (r.mode === "versus") {
+    const won = r.winner === S.me;
+    $("overTitle").textContent = won ? "🏆 You won!" : `${escapeHtml(d.names[r.winner] || "Rival")} wins`;
+    $("overScore").textContent = mine;
+  } else {
+    $("overTitle").textContent = r.stars >= 2 ? "Great shift!" : "Shift over";
+    $("overScore").textContent = r.teamScore;
+  }
 
-window.addEventListener("beforeunload", () => {
-  if (gameState.socket) gameState.socket.disconnect();
-  cancelAnimationFrame(animationFrameId);
-});
+  const ids = Object.keys(r.scores);
+  if (ids.length > 1) {
+    $("overBoard").style.display = "block";
+    const rows = $("overRows");
+    rows.innerHTML = "";
+    ids
+      .sort((a, b) => r.scores[b] - r.scores[a])
+      .forEach((id, i) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML =
+          `<span style="font-size:18px">${["🥇", "🥈", "🥉", "4️⃣"][i] || "•"}</span>` +
+          `<span class="who">${escapeHtml(d.names[id] || "Cook")}${id === S.me ? " (you)" : ""}</span>` +
+          `<span class="pill">${r.scores[id]}</span>`;
+        rows.appendChild(row);
+      });
+  } else {
+    $("overBoard").style.display = "none";
+  }
 
-document.getElementById("coopMode").classList.add("selected");
+  screen("over");
+}
+
+/* ============================================================ socket === */
+
+function connect() {
+  S.socket = io({ transports: ["websocket", "polling"] });
+
+  S.socket.on("connect", () => {
+    $("boot").classList.add("off");
+    S.socket.emit("hello", { name: S.name });
+  });
+
+  S.socket.on("connect_error", () => {
+    $("boot").classList.remove("off");
+    $("bootTxt").textContent = "Reconnecting…";
+  });
+
+  S.socket.on("disconnect", () => {
+    $("boot").classList.remove("off");
+    $("bootTxt").textContent = "Connection lost — reconnecting…";
+  });
+
+  S.socket.on("welcome", (d) => {
+    S.me = d.id;
+  });
+
+  S.socket.on("rooms", renderRooms);
+
+  S.socket.on("lobby", (d) => {
+    renderLobby(d);
+    if (!$("match").classList.contains("on") && !$("over").classList.contains("on")) {
+      screen("lobby");
+    }
+  });
+
+  S.socket.on("match_start", (d) => {
+    S.names = d.names;
+    S.snap = d.snapshot;
+    clearCustomers();
+    syncCustomers(d.snapshot);
+    renderHud();
+    renderTickets();
+    renderKitchen();
+    screen("match");
+  });
+
+  S.socket.on("state", (d) => {
+    S.snap = d.snapshot;
+    syncCustomers(d.snapshot);
+    renderHud();
+    renderTickets();
+    renderKitchen();
+    if (d.events && d.events.length) applyEvents(d.events);
+  });
+
+  S.socket.on("match_end", (d) => {
+    setTimeout(() => showResults(d), 700);
+  });
+
+  S.socket.on("level_up", (d) => toast(`🎉 You reached level ${d.level}!`));
+
+  S.socket.on("nope", (r) => {
+    if (r.reason === "need_dish") {
+      const d = S.snap && S.snap.dishes[r.need];
+      toast(d ? `They want ${d.emoji} ${d.name} — cook it first` : "You don't have that dish yet");
+    } else if (r.reason === "already_cooking") toast("Stove's busy");
+    else if (r.reason === "tray_full") toast("Pass is full — serve something");
+    else if (r.reason === "not_your_table") toast("That's your rival's table");
+    else if (r.reason === "gone") toast("Too late — they left");
+  });
+
+  S.socket.on("oops", (m) => toast(m));
+}
+
+/* ============================================================ wiring === */
+
+const VENUES = [
+  [1, "🍔 Family Diner"], [11, "🍟 Burger Joint"], [21, "🍕 Pizza Place"],
+  [31, "🍣 Sushi Bar"], [41, "🌮 Taco Stand"], [51, "🐟 Fish & Chips"],
+  [61, "🥩 Steakhouse"], [71, "🍝 Italian Kitchen"], [81, "🍽️ Luxury Buffet"],
+  [91, "👨‍🍳 Five-Star"],
+];
+
+function venueFor(level) {
+  let out = VENUES[0][1];
+  VENUES.forEach(([from, nm]) => { if (level >= from) out = nm; });
+  return out;
+}
+
+function boot() {
+  initStage();
+  connect();
+
+  const saved = localStorage.getItem("re_name");
+  if (saved) { $("name").value = saved; S.name = saved; }
+
+  $("name").addEventListener("input", (e) => {
+    S.name = e.target.value.trim();
+    localStorage.setItem("re_name", S.name);
+    if (S.socket && S.socket.connected) S.socket.emit("hello", { name: S.name });
+  });
+
+  function requireName() {
+    if (!S.name) { toast("Enter a name first"); $("name").focus(); return false; }
+    return true;
+  }
+
+  $("goHost").addEventListener("click", () => { if (requireName()) screen("setup"); });
+  $("goJoin").addEventListener("click", () => {
+    if (!requireName()) return;
+    S.socket.emit("rooms");
+    screen("browse");
+  });
+  $("setupBack").addEventListener("click", () => screen("home"));
+  $("browseBack").addEventListener("click", () => screen("home"));
+
+  let mode = "co-op";
+  $("mCoop").addEventListener("click", () => {
+    mode = "co-op";
+    $("mCoop").classList.add("on"); $("mVersus").classList.remove("on");
+  });
+  $("mVersus").addEventListener("click", () => {
+    mode = "versus";
+    $("mVersus").classList.add("on"); $("mCoop").classList.remove("on");
+  });
+
+  const lvlIn = $("lvl");
+  function previewVenue() {
+    const v = Math.min(100, Math.max(1, parseInt(lvlIn.value, 10) || 1));
+    $("venuePreview").textContent = "You'll be running: " + venueFor(v);
+  }
+  lvlIn.addEventListener("input", previewVenue);
+  previewVenue();
+
+  $("mkRoom").addEventListener("click", () => {
+    const level = Math.min(100, Math.max(1, parseInt(lvlIn.value, 10) || 1));
+    S.socket.emit("create_room", { mode, level });
+  });
+
+  $("codeGo").addEventListener("click", () => {
+    const code = $("codeIn").value.toUpperCase().trim();
+    if (code.length !== 4) return toast("Codes are 4 letters");
+    S.socket.emit("join_room", { code });
+  });
+
+  $("startBtn").addEventListener("click", () => S.socket.emit("start_match"));
+  $("leaveBtn").addEventListener("click", () => {
+    S.socket.emit("leave_room");
+    screen("home");
+  });
+
+  $("againBtn").addEventListener("click", () => {
+    clearCustomers();
+    screen("lobby");
+  });
+  $("homeBtn").addEventListener("click", () => {
+    S.socket.emit("leave_room");
+    clearCustomers();
+    screen("home");
+  });
+}
+
+if (document.readyState === "loading") {
+  addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
