@@ -1,6 +1,6 @@
 {
   "name": "restaurant-empire",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
   "description": "3D multiplayer restaurant game - cook, plate and serve before customers walk out.",
   "main": "server.js",

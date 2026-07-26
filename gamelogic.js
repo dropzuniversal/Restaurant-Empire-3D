@@ -1,156 +1,109 @@
 "use strict";
 
-/**
- * gamelogic.js
- * Pure game logic. No sockets, no express, no DOM.
- * This makes the whole game loop unit-testable (see test-simulate.js).
- */
+const { DISHES, MODIFIERS, UPGRADES, venueForLevel, menuForLevel, rollModifier } = require("./dishes");
 
-// ---------------------------------------------------------------- dishes
+/* ------------------------------------------------------------------ world */
 
-const DISHES = {
-  burger: { name: "Burger",  emoji: "🍔", cookTime: 3.5, points: 100 },
-  fries:  { name: "Fries",   emoji: "🍟", cookTime: 2.0, points: 60  },
-  salad:  { name: "Salad",   emoji: "🥗", cookTime: 1.5, points: 50  },
-  pizza:  { name: "Pizza",   emoji: "🍕", cookTime: 5.0, points: 140 },
-  pasta:  { name: "Pasta",   emoji: "🍝", cookTime: 4.0, points: 120 },
-  sushi:  { name: "Sushi",   emoji: "🍣", cookTime: 4.5, points: 130 },
-  ramen:  { name: "Ramen",   emoji: "🍜", cookTime: 5.5, points: 150 },
-  taco:   { name: "Taco",    emoji: "🌮", cookTime: 2.5, points: 80  },
-  fish:   { name: "Fish",    emoji: "🐟", cookTime: 4.0, points: 120 },
-  steak:  { name: "Steak",   emoji: "🥩", cookTime: 6.0, points: 180 },
-  coffee: { name: "Coffee",  emoji: "☕", cookTime: 1.5, points: 45  },
-  cake:   { name: "Cake",    emoji: "🍰", cookTime: 3.0, points: 95  },
-};
-
-// ---------------------------------------------------------------- venues
-
-// Each venue has its own menu. More dishes = harder (more to remember/juggle).
-const RESTAURANTS = [
-  { id: 0, name: "Family Diner",    emoji: "🍔", from: 1,  to: 10,  menu: ["burger", "fries", "coffee"] },
-  { id: 1, name: "Burger Joint",    emoji: "🍟", from: 11, to: 20,  menu: ["burger", "fries", "salad", "coffee"] },
-  { id: 2, name: "Pizza Place",     emoji: "🍕", from: 21, to: 30,  menu: ["pizza", "salad", "pasta", "coffee"] },
-  { id: 3, name: "Sushi Bar",       emoji: "🍣", from: 31, to: 40,  menu: ["sushi", "ramen", "salad"] },
-  { id: 4, name: "Taco Stand",      emoji: "🌮", from: 41, to: 50,  menu: ["taco", "fries", "salad", "coffee"] },
-  { id: 5, name: "Fish & Chips",    emoji: "🐟", from: 51, to: 60,  menu: ["fish", "fries", "salad", "cake"] },
-  { id: 6, name: "Steakhouse",      emoji: "🥩", from: 61, to: 70,  menu: ["steak", "salad", "cake", "coffee"] },
-  { id: 7, name: "Italian Kitchen", emoji: "🍝", from: 71, to: 80,  menu: ["pasta", "pizza", "salad", "cake", "coffee"] },
-  { id: 8, name: "Luxury Buffet",   emoji: "🍽️", from: 81, to: 90,  menu: ["steak", "sushi", "pasta", "cake", "salad"] },
-  { id: 9, name: "Five-Star",       emoji: "👨‍🍳", from: 91, to: 100, menu: ["steak", "sushi", "ramen", "cake", "pizza", "coffee"] },
+/** Where the six tables sit. Shared by server (range checks) and client (3D). */
+const SEATS = [
+  { x: -6.2, z: 1.5 }, { x: 0, z: 1.5 }, { x: 6.2, z: 1.5 },
+  { x: -6.2, z: 6.5 }, { x: 0, z: 6.5 }, { x: 6.2, z: 6.5 },
 ];
 
-const SEATS = 6;          // physical tables in the 3D room
-const TRAY_CAPACITY = 3;  // ready plates a cook can hold
+const FLOOR = { minX: -14.5, maxX: 14.5, minZ: -6.5, maxZ: 9.5 };
+const KITCHEN_Z = -4.6;   // stand at or behind this line to work the stove
+const SERVE_RANGE = 3.4;  // how close you must be to hand over a plate
+const MAX_SPEED = 16;     // server-side sanity clamp (units/sec)
 const MISS_PENALTY = 25;
 
-function restaurantForLevel(level) {
-  return RESTAURANTS.find((r) => level >= r.from && level <= r.to) || RESTAURANTS[0];
-}
+/* ---------------------------------------------------------------- helpers */
 
-/** Seconds a customer will wait before storming out. Shrinks as levels rise. */
-function patienceForLevel(level) {
-  return Math.max(14, 30 - Math.floor(level / 6) * 2);
-}
+const dist = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-/** How many customers can be seated at once. */
-function concurrentForLevel(level) {
-  return Math.min(SEATS, 2 + Math.floor(level / 12));
+function up(station, key) {
+  return (station.upgrades && station.upgrades[key]) || 0;
 }
+function trayCap(station) { return 3 + up(station, "pass"); }
+function cookSlots(station) { return 1 + up(station, "burner"); }
+function cookScale(station) { return Math.pow(0.88, up(station, "stove")); }
+function tipScale(station) { return 1 + up(station, "charm") * 0.30; }
+function moveScale(station) { return 1 + up(station, "shoes") * 0.16; }
 
-/** Total customers that will visit during the shift. */
-function totalCustomersForLevel(level) {
-  return 8 + Math.floor(level / 4);
-}
-
-/** Shift length in seconds. */
+function patienceForLevel(level) { return Math.max(15, 34 - Math.floor(level / 6) * 2); }
+function concurrentForLevel(level) { return Math.min(SEATS.length, 2 + Math.floor(level / 10)); }
+function totalCustomersForLevel(level) { return 8 + Math.floor(level / 5); }
 function shiftSecondsForLevel(level, fast) {
   if (fast) return 30;
-  return Math.min(180, 90 + Math.floor(level / 8) * 10);
+  return Math.min(210, 95 + Math.floor(level / 6) * 10);
 }
 
-// ---------------------------------------------------------------- match
+/* ------------------------------------------------------------------ match */
 
-/**
- * Create a fresh match.
- * @param {object} opts
- * @param {number} opts.level
- * @param {"co-op"|"versus"} opts.mode
- * @param {string[]} opts.playerIds
- * @param {boolean} [opts.fast]
- * @param {() => number} [opts.rng] injectable RNG so tests are deterministic
- */
 function createMatch(opts) {
-  const level = Math.min(100, Math.max(1, opts.level | 0 || 1));
+  const level = clamp(parseInt(opts.level, 10) || 1, 1, 100);
   const mode = opts.mode === "versus" ? "versus" : "co-op";
-  const playerIds = opts.playerIds.slice();
-  const restaurant = restaurantForLevel(level);
+  const venue = venueForLevel(level);
+  const menu = menuForLevel(level);
   const rng = opts.rng || Math.random;
 
   const match = {
-    level,
-    mode,
-    rng,
-    restaurant: {
-      id: restaurant.id,
-      name: restaurant.name,
-      emoji: restaurant.emoji,
-      menu: restaurant.menu.slice(),
-    },
-    menu: restaurant.menu.slice(),
-    dishes: restaurant.menu.reduce((acc, id) => {
-      acc[id] = { id, ...DISHES[id] };
-      return acc;
+    level, mode, rng,
+    venue: { id: venue.id, name: venue.name, emoji: venue.emoji },
+    menu,
+    dishes: menu.reduce((a, id) => {
+      a[id] = { id, name: DISHES[id].n, emoji: DISHES[id].e, cookTime: DISHES[id].t, points: DISHES[id].p };
+      return a;
     }, {}),
 
     maxTime: shiftSecondsForLevel(level, opts.fast),
     timeRemaining: shiftSecondsForLevel(level, opts.fast),
-
-    patience: patienceForLevel(level),
+    basePatience: patienceForLevel(level),
     concurrent: concurrentForLevel(level),
     totalCustomers: totalCustomersForLevel(level),
 
-    spawned: 0,
-    served: 0,
-    missed: 0,
-
-    customers: [],          // active + recently-departed (departed pruned each tick)
-    stations: {},           // playerId -> { cooking, tray }
-    scores: {},             // playerId -> number
-    combos: {},             // playerId -> consecutive on-time serves
-    events: [],             // transient feed, drained each tick
+    spawned: 0, served: 0, missed: 0,
+    customers: [],
+    stations: {},
+    scores: {},
+    tips: {},
+    combos: {},
+    bestCombo: {},
+    events: [],
     over: false,
     nextCustomerId: 1,
     spawnCooldown: 0,
   };
 
-  playerIds.forEach((pid) => {
-    match.stations[pid] = { cooking: null, tray: [] };
-    match.scores[pid] = 0;
-    match.combos[pid] = 0;
+  (opts.playerIds || []).forEach((pid) => {
+    addPlayer(match, pid, (opts.upgrades && opts.upgrades[pid]) || {});
   });
 
-  // Seat the opening rush immediately so the player has something to do at t=0.
-  const opening = Math.min(match.concurrent, 2);
-  for (let i = 0; i < opening; i++) spawnCustomer(match);
-
+  for (let i = 0; i < Math.min(match.concurrent, 2); i++) spawnCustomer(match);
   return match;
 }
 
-function addPlayer(match, playerId) {
-  if (!match.stations[playerId]) {
-    match.stations[playerId] = { cooking: null, tray: [] };
-    match.scores[playerId] = 0;
-    match.combos[playerId] = 0;
-  }
+function addPlayer(match, pid, upgrades) {
+  if (match.stations[pid]) return;
+  match.stations[pid] = {
+    upgrades: Object.assign(
+      { stove: 0, pass: 0, burner: 0, shoes: 0, charm: 0, chairs: 0 },
+      upgrades || {}
+    ),
+    cooking: [],
+    tray: [],
+    x: 0,
+    z: -5.2,
+  };
+  match.scores[pid] = 0;
+  match.tips[pid] = 0;
+  match.combos[pid] = 0;
+  match.bestCombo[pid] = 0;
 }
 
 function freeSeats(match) {
-  const taken = new Set(
-    match.customers.filter((c) => c.state === "waiting").map((c) => c.seat)
-  );
-  const out = [];
-  for (let s = 0; s < SEATS; s++) if (!taken.has(s)) out.push(s);
-  return out;
+  const taken = new Set(match.customers.filter((c) => c.state === "waiting").map((c) => c.seat));
+  return SEATS.map((_, i) => i).filter((i) => !taken.has(i));
 }
 
 function spawnCustomer(match) {
@@ -161,56 +114,83 @@ function spawnCustomer(match) {
 
   const seat = seats[Math.floor(match.rng() * seats.length)];
   const dish = match.menu[Math.floor(match.rng() * match.menu.length)];
+  const modKey = rollModifier(match.level, match.rng);
+  const mod = MODIFIERS[modKey];
 
-  // In versus each cook gets their own ticket stream so scores are comparable.
+  // "Comfier chairs" is a team perk — take the best chair upgrade in the kitchen.
+  let chairBoost = 0;
+  Object.values(match.stations).forEach((s) => { chairBoost = Math.max(chairBoost, up(s, "chairs")); });
+  const patience = match.basePatience * mod.wait * (1 + chairBoost * 0.10);
+
   let owner = null;
   if (match.mode === "versus") {
     const ids = Object.keys(match.stations);
     if (ids.length) owner = ids[match.spawned % ids.length];
   }
 
-  const customer = {
+  const c = {
     id: match.nextCustomerId++,
-    seat,
-    dish,
-    emoji: DISHES[dish].emoji,
+    seat, dish,
+    emoji: DISHES[dish].e,
+    mod: modKey,
+    badge: mod.badge,
     state: "waiting",
-    patience: match.patience,
-    maxPatience: match.patience,
-    owner,
-    mood: 1,
+    patience, maxPatience: patience,
+    owner, mood: 1,
   };
-
-  match.customers.push(customer);
+  match.customers.push(c);
   match.spawned++;
-  return customer;
+  return c;
 }
 
-/** Start cooking a dish at this player's station. Returns {ok, reason}. */
-function startCook(match, playerId, dishId) {
+/* ---------------------------------------------------------------- actions */
+
+/** Client tells us where its chef is. We sanity-check rather than trust it. */
+function moveTo(match, pid, x, z, dt) {
+  const st = match.stations[pid];
+  if (!st) return false;
+  const nx = clamp(Number(x) || 0, FLOOR.minX, FLOOR.maxX);
+  const nz = clamp(Number(z) || 0, FLOOR.minZ, FLOOR.maxZ);
+  const allowed = MAX_SPEED * moveScale(st) * Math.max(0.05, dt || 0.2) + 1.5;
+  const d = dist(st.x, st.z, nx, nz);
+  if (d > allowed) {
+    // Too far for the time elapsed — drag them toward the claim, don't teleport.
+    st.x += ((nx - st.x) / d) * allowed;
+    st.z += ((nz - st.z) / d) * allowed;
+    return false;
+  }
+  st.x = nx; st.z = nz;
+  return true;
+}
+
+function atStove(st) { return st.z <= KITCHEN_Z; }
+
+function startCook(match, pid, dishId) {
   if (match.over) return { ok: false, reason: "shift_over" };
-  const st = match.stations[playerId];
+  const st = match.stations[pid];
   if (!st) return { ok: false, reason: "no_station" };
-  if (st.cooking) return { ok: false, reason: "already_cooking" };
-  if (st.tray.length >= TRAY_CAPACITY) return { ok: false, reason: "tray_full" };
+  if (!atStove(st)) return { ok: false, reason: "too_far_from_stove" };
+  if (st.cooking.length >= cookSlots(st)) return { ok: false, reason: "already_cooking" };
+  if (st.tray.length + st.cooking.length >= trayCap(st)) return { ok: false, reason: "tray_full" };
   if (!match.menu.includes(dishId)) return { ok: false, reason: "not_on_menu" };
 
-  const d = DISHES[dishId];
-  st.cooking = { dish: dishId, emoji: d.emoji, remaining: d.cookTime, total: d.cookTime };
+  const time = DISHES[dishId].t * cookScale(st);
+  st.cooking.push({ dish: dishId, emoji: DISHES[dishId].e, remaining: time, total: time });
   return { ok: true, dish: dishId };
 }
 
-/** Serve a plate from the tray to a specific customer. Returns {ok, reason, points}. */
-function serve(match, playerId, customerId) {
+function serve(match, pid, customerId) {
   if (match.over) return { ok: false, reason: "shift_over" };
-  const st = match.stations[playerId];
+  const st = match.stations[pid];
   if (!st) return { ok: false, reason: "no_station" };
 
   const c = match.customers.find((x) => x.id === customerId);
-  if (!c) return { ok: false, reason: "gone" };
-  if (c.state !== "waiting") return { ok: false, reason: "gone" };
-  if (match.mode === "versus" && c.owner && c.owner !== playerId) {
-    return { ok: false, reason: "not_your_table" };
+  if (!c || c.state !== "waiting") return { ok: false, reason: "gone" };
+  if (match.mode === "versus" && c.owner && c.owner !== pid) return { ok: false, reason: "not_your_table" };
+
+  const seat = SEATS[c.seat];
+  if (dist(st.x, st.z, seat.x, seat.z) > SERVE_RANGE) {
+    return { ok: false, reason: "too_far", seat: c.seat };
   }
 
   const idx = st.tray.indexOf(c.dish);
@@ -218,220 +198,215 @@ function serve(match, playerId, customerId) {
 
   st.tray.splice(idx, 1);
   c.state = "served";
-  c.departAt = 1.2; // linger briefly so the player sees the happy customer
+  c.departAt = 1.3;
 
-  const ratio = Math.max(0, c.patience / c.maxPatience);
-  const base = DISHES[c.dish].points;
-  match.combos[playerId] = (match.combos[playerId] || 0) + 1;
-  const comboBonus = Math.min(50, (match.combos[playerId] - 1) * 10);
-  const points = Math.round(base * (0.5 + 0.5 * ratio)) + comboBonus;
+  const ratio = clamp(c.patience / c.maxPatience, 0, 1);
+  const mod = MODIFIERS[c.mod];
+  const base = DISHES[c.dish].p * mod.pay;
 
-  match.scores[playerId] += points;
+  match.combos[pid] += 1;
+  match.bestCombo[pid] = Math.max(match.bestCombo[pid], match.combos[pid]);
+  const comboBonus = Math.min(80, (match.combos[pid] - 1) * 12);
+  const points = Math.round(base * (0.55 + 0.45 * ratio)) + comboBonus;
+  const tip = Math.round(base * 0.16 * (0.4 + 0.6 * ratio) * tipScale(st));
+
+  match.scores[pid] += points;
+  match.tips[pid] += tip;
   match.served++;
-  match.events.push({
-    type: "served",
-    playerId,
-    customerId: c.id,
-    dish: c.dish,
-    points,
-    combo: match.combos[playerId],
-  });
 
-  return { ok: true, points, combo: match.combos[playerId] };
+  match.events.push({
+    type: "served", playerId: pid, customerId: c.id, seat: c.seat,
+    dish: c.dish, mod: c.mod, points, tip, combo: match.combos[pid],
+    perfect: ratio > 0.6,
+  });
+  return { ok: true, points, tip, combo: match.combos[pid] };
 }
 
-/** Bin the oldest plate in the tray (lets a player unstick a full tray). */
-function discard(match, playerId) {
-  const st = match.stations[playerId];
+function discard(match, pid) {
+  const st = match.stations[pid];
   if (!st || !st.tray.length) return { ok: false, reason: "tray_empty" };
   const dish = st.tray.shift();
+  match.events.push({ type: "binned", playerId: pid, dish });
   return { ok: true, dish };
 }
 
-/**
- * Advance the match by dt seconds.
- * Returns the list of events that happened this tick.
- */
-function tick(match, dt) {
-  if (match.over) return [];
+/* ------------------------------------------------------------------- tick */
 
-  // NOTE: events are intentionally NOT cleared here. Player actions (serve,
-  // cook) happen between ticks and push events too; clearing here would
-  // silently swallow them before the server ever broadcasts them.
-  // The caller drains with drainEvents() after each broadcast.
+function tick(match, dt) {
+  if (match.over) return;
 
   match.timeRemaining = Math.max(0, match.timeRemaining - dt);
 
-  // --- cooking
   for (const pid of Object.keys(match.stations)) {
     const st = match.stations[pid];
-    if (!st.cooking) continue;
-    st.cooking.remaining -= dt;
-    if (st.cooking.remaining <= 0) {
-      const dish = st.cooking.dish;
-      st.cooking = null;
-      if (st.tray.length < TRAY_CAPACITY) {
-        st.tray.push(dish);
-        match.events.push({ type: "plated", playerId: pid, dish });
-      } else {
-        match.events.push({ type: "burned", playerId: pid, dish });
+    for (let i = st.cooking.length - 1; i >= 0; i--) {
+      const job = st.cooking[i];
+      job.remaining -= dt;
+      if (job.remaining <= 0) {
+        st.cooking.splice(i, 1);
+        if (st.tray.length < trayCap(st)) {
+          st.tray.push(job.dish);
+          match.events.push({ type: "plated", playerId: pid, dish: job.dish });
+        } else {
+          match.events.push({ type: "burned", playerId: pid, dish: job.dish });
+        }
       }
     }
   }
 
-  // --- customers
   for (const c of match.customers) {
     if (c.state === "waiting") {
       c.patience = Math.max(0, c.patience - dt);
       c.mood = c.patience / c.maxPatience;
       if (c.patience <= 0) {
         c.state = "left";
-        c.departAt = 0.8;
+        c.departAt = 0.9;
         match.missed++;
-        const target = match.mode === "versus" && c.owner ? c.owner : null;
-        if (target) {
-          match.scores[target] = Math.max(0, match.scores[target] - MISS_PENALTY);
-          match.combos[target] = 0;
-        } else {
-          for (const pid of Object.keys(match.scores)) {
-            match.scores[pid] = Math.max(0, match.scores[pid] - MISS_PENALTY);
-            match.combos[pid] = 0;
-          }
-        }
-        match.events.push({ type: "walked_out", customerId: c.id, dish: c.dish });
+        const targets = match.mode === "versus" && c.owner ? [c.owner] : Object.keys(match.scores);
+        targets.forEach((pid) => {
+          match.scores[pid] = Math.max(0, match.scores[pid] - MISS_PENALTY);
+          match.combos[pid] = 0;
+        });
+        match.events.push({ type: "walked_out", customerId: c.id, seat: c.seat, dish: c.dish });
       }
     } else {
       c.departAt -= dt;
     }
   }
+  match.customers = match.customers.filter((c) => c.state === "waiting" || c.departAt > 0);
 
-  // remove customers who have finished their departure animation
-  match.customers = match.customers.filter(
-    (c) => c.state === "waiting" || c.departAt > 0
-  );
-
-  // --- spawning
   match.spawnCooldown -= dt;
   if (match.spawnCooldown <= 0) {
     const waiting = match.customers.filter((c) => c.state === "waiting").length;
     if (waiting < match.concurrent && match.spawned < match.totalCustomers) {
-      const spawned = spawnCustomer(match);
-      if (spawned) match.events.push({ type: "arrived", customerId: spawned.id, dish: spawned.dish });
-      match.spawnCooldown = 1.5 + match.rng() * 2;
+      const s = spawnCustomer(match);
+      if (s) match.events.push({ type: "arrived", customerId: s.id, seat: s.seat, dish: s.dish });
+      match.spawnCooldown = Math.max(0.8, 2.4 - match.level * 0.012) + match.rng();
     } else {
       match.spawnCooldown = 0.5;
     }
   }
 
-  // --- end conditions
-  const allGone =
-    match.spawned >= match.totalCustomers &&
+  const allDone = match.spawned >= match.totalCustomers &&
     match.customers.every((c) => c.state !== "waiting");
-  if (match.timeRemaining <= 0 || allGone) {
+  if (match.timeRemaining <= 0 || allDone) {
     match.over = true;
     match.events.push({ type: "shift_over" });
   }
-
-  return match.events;
 }
 
-/** Take everything queued since the last drain and clear the queue. */
 function drainEvents(match) {
   const out = match.events;
   match.events = [];
   return out;
 }
 
-/** Small serialisable snapshot for the wire. */
+/* --------------------------------------------------------------- snapshot */
+
 function snapshot(match) {
   return {
     level: match.level,
     mode: match.mode,
-    restaurant: match.restaurant,
+    venue: match.venue,
     menu: match.menu,
     dishes: match.dishes,
+    modifiers: MODIFIERS,
+    seats: SEATS,
+    serveRange: SERVE_RANGE,
+    kitchenZ: KITCHEN_Z,
+    floor: FLOOR,
     timeRemaining: Math.ceil(match.timeRemaining),
     maxTime: match.maxTime,
     served: match.served,
     missed: match.missed,
     totalCustomers: match.totalCustomers,
     scores: match.scores,
+    tips: match.tips,
     combos: match.combos,
     over: match.over,
-    trayCapacity: TRAY_CAPACITY,
     customers: match.customers.map((c) => ({
-      id: c.id,
-      seat: c.seat,
-      dish: c.dish,
-      emoji: c.emoji,
-      state: c.state,
-      owner: c.owner,
-      mood: Math.max(0, Math.min(1, c.mood)),
-      patience: Math.max(0, Math.ceil(c.patience)),
-      maxPatience: c.maxPatience,
+      id: c.id, seat: c.seat, dish: c.dish, emoji: c.emoji,
+      mod: c.mod, badge: c.badge, state: c.state, owner: c.owner,
+      mood: clamp(c.mood, 0, 1), patience: Math.max(0, Math.ceil(c.patience)),
     })),
-    stations: Object.keys(match.stations).reduce((acc, pid) => {
+    stations: Object.keys(match.stations).reduce((a, pid) => {
       const st = match.stations[pid];
-      acc[pid] = {
-        cooking: st.cooking
-          ? {
-              dish: st.cooking.dish,
-              emoji: st.cooking.emoji,
-              progress: 1 - st.cooking.remaining / st.cooking.total,
-              remaining: Math.max(0, st.cooking.remaining),
-            }
-          : null,
+      a[pid] = {
+        x: Math.round(st.x * 100) / 100,
+        z: Math.round(st.z * 100) / 100,
+        trayCap: trayCap(st),
+        cookSlots: cookSlots(st),
+        moveScale: moveScale(st),
         tray: st.tray.slice(),
+        cooking: st.cooking.map((j) => ({
+          dish: j.dish, emoji: j.emoji,
+          progress: clamp(1 - j.remaining / j.total, 0, 1),
+          remaining: Math.max(0, j.remaining),
+        })),
       };
-      return acc;
+      return a;
     }, {}),
   };
 }
 
 function results(match) {
-  const scores = match.scores;
-  const ids = Object.keys(scores);
-  let winner = null;
-  if (match.mode === "versus" && ids.length) {
-    winner = ids.reduce((a, b) => (scores[a] >= scores[b] ? a : b));
-  }
-  const total = ids.reduce((sum, id) => sum + scores[id], 0);
-  const accuracy = match.totalCustomers
-    ? Math.round((match.served / match.totalCustomers) * 100)
-    : 0;
+  const ids = Object.keys(match.scores);
+  const teamScore = ids.reduce((s, id) => s + match.scores[id], 0);
+  const accuracy = match.totalCustomers ? Math.round((match.served / match.totalCustomers) * 100) : 0;
   let stars = 0;
-  if (accuracy >= 50) stars = 1;
+  if (accuracy >= 45) stars = 1;
   if (accuracy >= 70) stars = 2;
   if (accuracy >= 90) stars = 3;
 
+  let winner = null;
+  if (match.mode === "versus" && ids.length) {
+    winner = ids.reduce((a, b) => (match.scores[a] >= match.scores[b] ? a : b));
+  }
+
   return {
-    mode: match.mode,
-    level: match.level,
-    restaurant: match.restaurant,
-    scores,
-    teamScore: total,
-    served: match.served,
-    missed: match.missed,
-    totalCustomers: match.totalCustomers,
-    accuracy,
-    stars,
-    winner,
+    mode: match.mode, level: match.level, venue: match.venue,
+    scores: match.scores, tips: match.tips, bestCombo: match.bestCombo,
+    teamScore, served: match.served, missed: match.missed,
+    totalCustomers: match.totalCustomers, accuracy, stars, winner,
+    passed: stars >= 1,
   };
 }
 
+/* --------------------------------------------------------------- upgrades */
+
+function upgradeCost(key, level) {
+  const u = UPGRADES[key];
+  if (!u || level >= u.max) return null;
+  return u.cost(level);
+}
+
+function buyUpgrade(wallet, upgrades, key) {
+  const u = UPGRADES[key];
+  if (!u) return { ok: false, reason: "unknown" };
+  const lvl = upgrades[key] || 0;
+  if (lvl >= u.max) return { ok: false, reason: "maxed" };
+  const cost = u.cost(lvl);
+  if (wallet < cost) return { ok: false, reason: "broke", cost };
+  upgrades[key] = lvl + 1;
+  return { ok: true, spent: cost, key, level: lvl + 1 };
+}
+
+function shopFor(upgrades) {
+  return Object.keys(UPGRADES).map((key) => {
+    const u = UPGRADES[key];
+    const lvl = (upgrades && upgrades[key]) || 0;
+    return {
+      key, name: u.name, emoji: u.emoji, level: lvl, max: u.max,
+      cost: lvl >= u.max ? null : u.cost(lvl),
+      blurb: lvl >= u.max ? "Fully upgraded" : u.blurb(lvl),
+    };
+  });
+}
+
 module.exports = {
-  DISHES,
-  RESTAURANTS,
-  SEATS,
-  TRAY_CAPACITY,
-  restaurantForLevel,
-  createMatch,
-  addPlayer,
-  startCook,
-  serve,
-  discard,
-  tick,
-  drainEvents,
-  snapshot,
-  results,
+  DISHES, MODIFIERS, UPGRADES, SEATS, FLOOR, KITCHEN_Z, SERVE_RANGE,
+  createMatch, addPlayer, moveTo, startCook, serve, discard,
+  tick, drainEvents, snapshot, results,
+  buyUpgrade, upgradeCost, shopFor,
+  trayCap, cookSlots,
 };
