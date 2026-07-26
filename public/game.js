@@ -202,12 +202,13 @@ function initSocket() {
     console.log("✅ Room created:", data.code);
     gameState.currentRoom = data.code;
     gameState.currentMode = data.mode;
-    gameState.isHost = true;
+    gameState.isHost = showLoading(false); // Hide loading!
     updateWaitingRoom();
     showScreen("waitingRoom");
     showToast(`✅ Room created: ${data.code}`);
   });
 
+  showLoading(false); // Hide loading!
   gameState.socket.on("room_joined", (data) => {
     console.log("✅ Joined room:", data.code);
     gameState.currentRoom = data.code;
@@ -231,6 +232,7 @@ function initSocket() {
     updateRoomList(rooms);
   });
 
+  showLoading(false); // Hide loading!
   gameState.socket.on("game_started", (data) => {
     console.log("🎮 Game started!");
     gameState.gameActive = true;
