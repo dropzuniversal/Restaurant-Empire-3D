@@ -7,61 +7,52 @@ const gameState = {
   playerMoney: 0,
   playerXP: 0,
   currentRoom: null,
-  currentRestaurant: null,
+  currentMode: null,
+  currentLevel: 1,
   gameActive: false,
+  isPaused: false,
+  isHost: false,
+  players: new Map(),
   gameTime: 0,
   maxTime: 0,
+  teamScore: 0,
   customersServed: 0,
   maxCustomers: 0,
-  teamScore: 0,
-  players: new Map(),
   isMobile: /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent),
 };
 
-// ===== THREE.JS SCENE SETUP =====
 let scene, camera, renderer, gameLight;
 let playerModel, restaurantGroup;
 let animationFrameId;
 
+// ===== THREE.JS INITIALIZATION =====
 function initThreeJS() {
   const container = document.getElementById("gameContainer");
 
-  // Scene
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87ceeb);
   scene.fog = new THREE.Fog(0x87ceeb, 100, 500);
 
-  // Camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 5, 8);
   camera.lookAt(0, 0, 0);
 
-  // Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowShadowMap;
   container.appendChild(renderer.domElement);
 
-  // Lighting
   gameLight = new THREE.DirectionalLight(0xffffff, 1);
   gameLight.position.set(20, 30, 20);
   gameLight.castShadow = true;
   gameLight.shadow.mapSize.width = 2048;
   gameLight.shadow.mapSize.height = 2048;
-  gameLight.shadow.camera.far = 200;
-  gameLight.shadow.camera.left = -100;
-  gameLight.shadow.camera.right = 100;
-  gameLight.shadow.camera.top = 100;
-  gameLight.shadow.camera.bottom = -100;
   scene.add(gameLight);
 
-  // Ambient light
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(ambientLight);
 
-  // Ground
   const groundGeometry = new THREE.PlaneGeometry(200, 200);
   const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x90ee90 });
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
@@ -69,37 +60,30 @@ function initThreeJS() {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Handle window resize
   window.addEventListener("resize", onWindowResize);
 
   createPlayer();
   createRestaurant();
 
-  // Start animation loop
   animate();
 }
 
 function createPlayer() {
-  // Create a simple capsule-shaped player
   if (playerModel) scene.remove(playerModel);
 
   playerModel = new THREE.Group();
 
-  // Body
   const bodyGeometry = new THREE.BoxGeometry(1, 2, 0.8);
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4a90e2 });
   const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
   body.castShadow = true;
-  body.receiveShadow = true;
   body.position.y = 1;
   playerModel.add(body);
 
-  // Head
   const headGeometry = new THREE.SphereGeometry(0.4, 32, 32);
   const headMaterial = new THREE.MeshStandardMaterial({ color: 0xf4a460 });
   const head = new THREE.Mesh(headGeometry, headMaterial);
   head.castShadow = true;
-  head.receiveShadow = true;
   head.position.y = 2.6;
   playerModel.add(head);
 
@@ -112,55 +96,44 @@ function createRestaurant() {
 
   restaurantGroup = new THREE.Group();
 
-  // Simple restaurant layout
-  // Building
   const wallGeometry = new THREE.BoxGeometry(30, 10, 25);
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xd4a574 });
   const walls = new THREE.Mesh(wallGeometry, wallMaterial);
   walls.castShadow = true;
-  walls.receiveShadow = true;
   walls.position.y = 5;
   restaurantGroup.add(walls);
 
-  // Roof
   const roofGeometry = new THREE.ConeGeometry(20, 6, 4);
   const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
   const roof = new THREE.Mesh(roofGeometry, roofMaterial);
   roof.castShadow = true;
-  roof.receiveShadow = true;
   roof.position.y = 12;
   roof.rotation.y = Math.PI / 4;
   restaurantGroup.add(roof);
 
-  // Counter (kitchen area)
   const counterGeometry = new THREE.BoxGeometry(15, 1, 3);
   const counterMaterial = new THREE.MeshStandardMaterial({ color: 0x654321 });
   const counter = new THREE.Mesh(counterGeometry, counterMaterial);
   counter.castShadow = true;
-  counter.receiveShadow = true;
   counter.position.set(0, 1, -8);
   restaurantGroup.add(counter);
 
-  // Tables
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 2; j++) {
       const tableGeometry = new THREE.BoxGeometry(2, 0.8, 2);
       const tableMaterial = new THREE.MeshStandardMaterial({ color: 0x8b7355 });
       const table = new THREE.Mesh(tableGeometry, tableMaterial);
       table.castShadow = true;
-      table.receiveShadow = true;
       table.position.set(-8 + i * 5, 0.4, 3 + j * 4);
       restaurantGroup.add(table);
     }
   }
 
-  // Cooking stations
   for (let i = 0; i < 3; i++) {
     const stoveGeometry = new THREE.BoxGeometry(2, 1.5, 2);
     const stoveMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
     const stove = new THREE.Mesh(stoveGeometry, stoveMaterial);
     stove.castShadow = true;
-    stove.receiveShadow = true;
     stove.position.set(-8 + i * 4, 0.75, -10);
     restaurantGroup.add(stove);
   }
@@ -169,23 +142,18 @@ function createRestaurant() {
 }
 
 function onWindowResize() {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-
-  camera.aspect = width / height;
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(width, height);
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() {
   animationFrameId = requestAnimationFrame(animate);
 
-  // Update player animation (simple bobbing walk)
   if (playerModel && gameState.gameActive) {
     playerModel.position.y = Math.sin(Date.now() * 0.005) * 0.1;
   }
 
-  // Update camera follow player
   if (playerModel) {
     camera.position.x += (playerModel.position.x - camera.position.x) * 0.1;
     camera.position.y += (5 - camera.position.y) * 0.1;
@@ -196,40 +164,67 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// ===== SOCKET.IO SETUP =====
+// ===== SOCKET.IO INITIALIZATION =====
 function initSocket() {
-  const socketUrl = window.location.origin;
+  console.log("🔌 Initializing Socket.IO connection...");
 
-  gameState.socket = io(socketUrl, {
+  gameState.socket = io(window.location.origin, {
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 5,
     transports: ["websocket", "polling"],
+    secure: window.location.protocol === "https:",
   });
 
   gameState.socket.on("connect", () => {
-    console.log("Connected to server:", gameState.socket.id);
-    gameState.playerId = gameState.socket.id;
+    console.log("✅ Connected to server:", gameState.socket.id);
+    showLoading(false);
+    showToast("✅ Connected to server!");
     joinGame();
   });
 
+  gameState.socket.on("connect_error", (error) => {
+    console.error("❌ Connection error:", error);
+    showToast("❌ Connection failed: " + error.message);
+  });
+
   gameState.socket.on("joined", (data) => {
-    console.log("Joined game:", data);
+    console.log("✅ Joined game:", data);
     gameState.playerId = data.playerId;
-    showMenu();
+    gameState.playerLevel = data.player?.level || 1;
+    gameState.playerMoney = data.player?.money || 0;
+    gameState.playerXP = data.player?.xp || 0;
+    showScreen("mainMenu");
   });
 
   gameState.socket.on("room_created", (data) => {
+    console.log("✅ Room created:", data.code);
     gameState.currentRoom = data.code;
-    hideMenuShowGame();
-    updateUI();
+    gameState.currentMode = data.mode;
+    gameState.isHost = true;
+    updateWaitingRoom();
+    showScreen("waitingRoom");
+    showToast(`✅ Room created: ${data.code}`);
   });
 
   gameState.socket.on("room_joined", (data) => {
+    console.log("✅ Joined room:", data.code);
     gameState.currentRoom = data.code;
-    hideMenuShowGame();
-    updateUI();
+    gameState.currentMode = data.room.mode;
+    gameState.isHost = false;
+    updateWaitingRoom();
+    showScreen("waitingRoom");
+    showToast(`✅ Joined room: ${data.code}`);
+  });
+
+  gameState.socket.on("room_updated", (room) => {
+    console.log("📢 Room updated:", room);
+    gameState.players.clear();
+    room.players.forEach(player => {
+      gameState.players.set(player.id, player);
+    });
+    updateWaitingRoom();
   });
 
   gameState.socket.on("rooms_updated", (rooms) => {
@@ -237,49 +232,55 @@ function initSocket() {
   });
 
   gameState.socket.on("game_started", (data) => {
+    console.log("🎮 Game started!");
     gameState.gameActive = true;
+    gameState.maxTime = data.gameState.maxTime;
+    gameState.gameTime = data.gameState.timeRemaining;
     gameState.maxCustomers = data.gameState.maxCustomers;
-    gameState.maxTime = data.gameState.timeRemaining;
-    updateUI();
+    gameState.teamScore = 0;
+    gameState.customersServed = 0;
+    showScreen("gameScreen");
+    document.getElementById("hud").classList.add("active");
+    document.getElementById("gameUI").classList.add("active");
+    updateGameHUD();
   });
 
   gameState.socket.on("game_update", (data) => {
-    gameState.gameTime = data.gameState.timeRemaining;
-    gameState.customersServed = data.gameState.customersServed;
-    gameState.teamScore = data.gameState.teamScore;
-    updateUI();
+    gameState.gameTime = data.timeRemaining;
+    gameState.teamScore = data.teamScore;
+    gameState.customersServed = data.customersServed;
+    updateGameHUD();
   });
 
   gameState.socket.on("game_ended", (data) => {
+    console.log("🏁 Game ended!");
     gameState.gameActive = false;
-    alert(`Game Over! Score: ${data.gameState.teamScore}`);
-    showMenu();
+    showGameOver(data);
   });
 
   gameState.socket.on("player_level_up", (data) => {
     if (data.playerId === gameState.playerId) {
       gameState.playerLevel = data.level;
       showToast(`🎉 Level ${data.level}!`);
-      updateUI();
+    } else {
+      showToast(`🎉 ${data.name} reached level ${data.level}!`);
     }
   });
 
-  gameState.socket.on("players_online", (count) => {
-    console.log(`Players online: ${count}`);
-  });
-
-  gameState.socket.on("chat", (data) => {
-    addChatMessage(data.playerName, data.message);
-  });
-
-  gameState.socket.on("disconnect", () => {
-    console.log("Disconnected from server");
-    showMenu();
+  gameState.socket.on("room_action", (action) => {
+    if (action.points) {
+      showToast(`✅ ${action.playerName}: +${action.points} pts`);
+    }
   });
 
   gameState.socket.on("error", (error) => {
-    console.error("Socket error:", error);
-    showToast(`Error: ${error}`);
+    console.error("❌ Socket error:", error);
+    showToast("❌ Error: " + error);
+  });
+
+  gameState.socket.on("disconnect", () => {
+    console.log("👋 Disconnected from server");
+    showToast("⚠️ Disconnected from server");
   });
 }
 
@@ -293,187 +294,253 @@ function joinGame() {
 }
 
 // ===== UI FUNCTIONS =====
-function showMenu() {
-  document.getElementById("mainMenu").classList.remove("hidden");
-  document.getElementById("gameUI").classList.remove("active");
-  document.getElementById("joystickContainer").style.display = "none";
-  document.getElementById("actionButtons").style.display = "none";
-  gameState.gameActive = false;
+function showScreen(screenName) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  const screen = document.getElementById(screenName);
+  if (screen) screen.classList.add("active");
 }
 
-function hideMenuShowGame() {
-  document.getElementById("mainMenu").classList.add("hidden");
-  document.getElementById("gameUI").classList.add("active");
-  document.getElementById("joystickContainer").style.display = gameState.isMobile ? "flex" : "none";
-  document.getElementById("actionButtons").style.display = gameState.isMobile ? "flex" : "none";
+function showLoading(show, text = "Connecting...") {
+  const loading = document.getElementById("loading");
+  const loadingText = document.getElementById("loadingText");
+  if (show) {
+    loading.classList.add("active");
+    loadingText.textContent = text;
+  } else {
+    loading.classList.remove("active");
+  }
 }
 
-function updateUI() {
-  document.getElementById("levelDisplay").textContent = gameState.playerLevel;
-  document.getElementById("moneyDisplay").textContent = `$${gameState.playerMoney}`;
-  const xpPercent = Math.floor((gameState.playerXP / (gameState.playerLevel * 500)) * 100);
-  document.getElementById("xpDisplay").textContent = `${xpPercent}%`;
-  document.getElementById("customersDisplay").textContent = `${gameState.customersServed}/${gameState.maxCustomers}`;
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+function updateWaitingRoom() {
+  document.getElementById("roomCodeDisplay").textContent = `Room: ${gameState.currentRoom}`;
+  document.getElementById("modeDisplay").textContent = 
+    gameState.currentMode === "co-op" ? "🤝 CO-OP" : "⚔️ VERSUS";
+
+  const playerListDisplay = document.getElementById("playerListDisplay");
+  playerListDisplay.innerHTML = gameState.players.size > 0 ? "" : "<p style='text-align: center; color: #999;'>Loading players...</p>";
+
+  gameState.players.forEach(player => {
+    const isHost = player.id === gameState.socket.id && gameState.isHost;
+    const playerEl = document.createElement("div");
+    playerEl.className = "player-item";
+    playerEl.innerHTML = `
+      <div class="player-icon">${isHost ? "👑" : "👤"}</div>
+      <div class="player-name">${player.name}</div>
+      <div class="player-level">Lvl ${player.level}</div>
+    `;
+    playerListDisplay.appendChild(playerEl);
+  });
+
+  const startBtn = document.getElementById("startGameBtn");
+  startBtn.style.display = gameState.isHost ? "block" : "none";
 }
 
 function updateRoomList(rooms) {
   const roomList = document.getElementById("roomList");
-  roomList.innerHTML = "";
 
-  rooms.forEach((room) => {
+  if (rooms.length === 0) {
+    roomList.innerHTML = '<div class="card" style="text-align: center; color: #999;">No rooms available. Create one!</div>';
+    return;
+  }
+
+  roomList.innerHTML = "";
+  rooms.forEach(room => {
     const card = document.createElement("div");
     card.className = "room-card";
     card.innerHTML = `
-      <div class="room-code">${room.code}</div>
       <div class="room-info">
-        <div>Mode: ${room.mode}</div>
-        <div>Players: ${room.players}/${room.maxPlayers || 4}</div>
+        <div class="room-code">${room.code}</div>
+        <div class="room-details">
+          ${room.mode === "co-op" ? "🤝 Co-op" : "⚔️ Versus"} • ${room.players}/4 players • Level ${room.level}
+        </div>
       </div>
+      <button class="room-action">JOIN</button>
     `;
-    card.addEventListener("click", () => {
-      gameState.socket.emit("join_room", room.code);
-      document.getElementById("roomListContainer").style.display = "none";
-      document.getElementById("menuButtons").style.display = "block";
+    card.querySelector(".room-action").addEventListener("click", () => {
+      joinRoom(room.code);
     });
     roomList.appendChild(card);
   });
 }
 
-function showToast(message) {
-  const toast = document.createElement("div");
-  toast.style.cssText = `
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    padding: 12px 24px;
-    border-radius: 8px;
-    border: 2px solid #667eea;
-    z-index: 9999;
-  `;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => toast.remove(), 2000);
+function joinRoom(roomCode) {
+  console.log("Joining room:", roomCode);
+  gameState.socket.emit("join_room", roomCode);
 }
 
-function addChatMessage(playerName, message) {
-  const chatBox = document.getElementById("chatBox");
-  if (chatBox.style.display === "none") chatBox.style.display = "block";
+function updateGameHUD() {
+  document.getElementById("hudLevel").textContent = gameState.playerLevel;
+  document.getElementById("hudScore").textContent = gameState.teamScore;
+  document.getElementById("hudCustomers").textContent = `${gameState.customersServed}/${gameState.maxCustomers}`;
+  document.getElementById("hudTime").textContent = gameState.gameTime;
+  document.getElementById("gameTimer").textContent = gameState.gameTime;
+}
 
-  const messageEl = document.createElement("div");
-  messageEl.className = "chat-message";
-  messageEl.innerHTML = `<span class="player-name">${playerName}:</span> ${message}`;
-  chatBox.appendChild(messageEl);
+function showGameOver(data) {
+  document.getElementById("finalScore").textContent = data.teamScore;
 
-  // Auto-scroll to bottom
-  chatBox.scrollTop = chatBox.scrollHeight;
+  const resultsCard = document.getElementById("resultsCard");
+  let html = `
+    <div class="score-label">Game Results</div>
+    <div style="margin-bottom: 16px;">
+      <p style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Mode: ${data.mode === "co-op" ? "🤝 CO-OP" : "⚔️ VERSUS"}</p>
+      <p style="font-size: 13px; color: #666;">Customers Served: ${data.customersServed}</p>
+  `;
 
-  // Limit messages shown
-  if (chatBox.children.length > 20) {
-    chatBox.children[0].remove();
+  if (data.mode === "versus" && data.winner) {
+    html += `<p style="font-size: 13px; color: var(--primary); font-weight: 600; margin-top: 8px;">🏆 Winner: ${data.winner}</p>`;
   }
+
+  html += `</div>`;
+  resultsCard.innerHTML = html;
+
+  document.getElementById("hud").classList.remove("active");
+  document.getElementById("gameUI").classList.remove("active");
+  showScreen("gameOverScreen");
 }
 
 // ===== EVENT LISTENERS =====
+document.getElementById("playerName").addEventListener("keyup", (e) => {
+  gameState.playerName = e.target.value || "Guest";
+});
+
 document.getElementById("hostBtn").addEventListener("click", () => {
-  gameState.playerName = document.getElementById("inputName").value || "Player";
-  gameState.socket.emit("create_room", { mode: "co-op", maxPlayers: 4, level: 1 });
-  document.getElementById("mainMenu").classList.add("hidden");
-  document.getElementById("loading").classList.remove("hidden");
+  if (!gameState.playerName) {
+    showToast("⚠️ Please enter your name");
+    return;
+  }
+  showScreen("modeScreen");
 });
 
 document.getElementById("joinBtn").addEventListener("click", () => {
-  gameState.playerName = document.getElementById("inputName").value || "Player";
-  document.getElementById("roomListContainer").style.display = "block";
-  document.getElementById("menuButtons").style.display = "none";
-  gameState.socket.emit("get_rooms");
+  if (!gameState.playerName) {
+    showToast("⚠️ Please enter your name");
+    return;
+  }
+  showScreen("browserScreen");
 });
 
-document.getElementById("backBtn").addEventListener("click", () => {
-  document.getElementById("roomListContainer").style.display = "none";
-  document.getElementById("menuButtons").style.display = "block";
+document.getElementById("backToMenuBtn").addEventListener("click", () => {
+  showScreen("mainMenu");
 });
 
-document.getElementById("pauseBtn").addEventListener("click", () => {
-  gameState.gameActive = !gameState.gameActive;
-  document.getElementById("pauseBtn").textContent = gameState.gameActive ? "⏸ Pause" : "▶ Resume";
+document.getElementById("backFromBrowserBtn").addEventListener("click", () => {
+  showScreen("mainMenu");
 });
 
-document.getElementById("leaveBtn").addEventListener("click", () => {
-  if (confirm("Leave the game?")) {
-    gameState.gameActive = false;
-    gameState.socket.emit("leave_room");
-    showMenu();
+// Mode selection
+let selectedMode = "co-op";
+document.getElementById("coopMode").addEventListener("click", () => {
+  selectedMode = "co-op";
+  document.getElementById("coopMode").classList.add("selected");
+  document.getElementById("versusMode").classList.remove("selected");
+});
+
+document.getElementById("versusMode").addEventListener("click", () => {
+  selectedMode = "versus";
+  document.getElementById("versusMode").classList.add("selected");
+  document.getElementById("coopMode").classList.remove("selected");
+});
+
+document.getElementById("confirmModeBtn").addEventListener("click", () => {
+  const level = parseInt(document.getElementById("levelInput").value) || 1;
+  if (level < 1 || level > 100) {
+    showToast("⚠️ Level must be between 1 and 100");
+    return;
+  }
+  
+  console.log("Creating room with mode:", selectedMode, "level:", level);
+  gameState.socket.emit("create_room", {
+    mode: selectedMode,
+    level: level
+  });
+  showLoading(true, "Creating room...");
+});
+
+// Room buttons
+document.getElementById("startGameBtn").addEventListener("click", () => {
+  if (gameState.isHost && gameState.currentRoom) {
+    console.log("Starting game...");
+    gameState.socket.emit("start_game", { roomCode: gameState.currentRoom });
+    showLoading(true, "Starting game...");
   }
 });
 
-// Action buttons
+document.getElementById("leaveRoomBtn").addEventListener("click", () => {
+  if (gameState.currentRoom) {
+    gameState.socket.emit("leave_room", gameState.currentRoom);
+    gameState.currentRoom = null;
+    gameState.isHost = false;
+    showScreen("mainMenu");
+  }
+});
+
+// Game buttons
 document.getElementById("cookBtn").addEventListener("click", () => {
-  gameState.socket.emit("player_action", {
-    roomCode: gameState.currentRoom,
-    type: "cook",
-    recipe: "burger",
-  });
-  showToast("🍳 Cooking...");
+  if (gameState.gameActive && gameState.currentRoom) {
+    gameState.socket.emit("player_action", {
+      roomCode: gameState.currentRoom,
+      type: "complete_order",
+      recipe: "burger"
+    });
+    showToast("🍳 Cooking...");
+  }
 });
 
 document.getElementById("serveBtn").addEventListener("click", () => {
-  gameState.socket.emit("player_action", {
-    roomCode: gameState.currentRoom,
-    type: "complete_order",
-    recipe: "burger",
-  });
-  showToast("🍽️ Served!");
+  if (gameState.gameActive && gameState.currentRoom) {
+    gameState.socket.emit("player_action", {
+      roomCode: gameState.currentRoom,
+      type: "complete_order",
+      recipe: "fries"
+    });
+    showToast("🍽️ Served!");
+  }
 });
 
-document.getElementById("cleanBtn").addEventListener("click", () => {
-  gameState.socket.emit("player_action", {
-    roomCode: gameState.currentRoom,
-    type: "clean",
-  });
-  showToast("🧹 Cleaned!");
+document.getElementById("pauseBtn").addEventListener("click", () => {
+  gameState.isPaused = !gameState.isPaused;
+  document.getElementById("pauseBtn").textContent = gameState.isPaused ? "▶ RESUME" : "⏸ PAUSE";
 });
 
-// Mobile joystick (simple implementation)
-if (gameState.isMobile) {
-  let touchStartX = 0;
-  let touchStartY = 0;
+document.getElementById("leaveGameBtn").addEventListener("click", () => {
+  if (confirm("Leave the game?")) {
+    gameState.gameActive = false;
+    gameState.socket.emit("leave_room", gameState.currentRoom);
+    gameState.currentRoom = null;
+    showScreen("mainMenu");
+  }
+});
 
-  document.addEventListener("touchstart", (e) => {
-    if (e.target.closest(".joystick-container")) {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    }
-  });
+// Game over buttons
+document.getElementById("playAgainBtn").addEventListener("click", () => {
+  showScreen("waitingRoom");
+});
 
-  document.addEventListener("touchmove", (e) => {
-    if (gameState.gameActive) {
-      const deltaX = e.touches[0].clientX - touchStartX;
-      const deltaY = e.touches[0].clientY - touchStartY;
+document.getElementById("mainMenuBtn").addEventListener("click", () => {
+  gameState.currentRoom = null;
+  gameState.isHost = false;
+  showScreen("mainMenu");
+});
 
-      if (playerModel) {
-        playerModel.position.x += deltaX * 0.01;
-        playerModel.position.z += deltaY * 0.01;
-
-        gameState.socket.emit("player_position", {
-          position: playerModel.position,
-          rotation: playerModel.rotation,
-        });
-      }
-    }
-  });
-}
+document.getElementById("refreshBtn").addEventListener("click", () => {
+  // Rooms update automatically via socket
+  showToast("🔄 Refreshing rooms...");
+});
 
 // ===== INITIALIZATION =====
 window.addEventListener("load", () => {
-  document.getElementById("loading").classList.remove("hidden");
+  console.log("🎮 Restaurant Empire 3D - Initializing...");
+  showLoading(true, "Loading game...");
   initThreeJS();
   initSocket();
-  showMenu();
-  document.getElementById("loading").classList.add("hidden");
 });
 
 window.addEventListener("beforeunload", () => {
@@ -482,3 +549,6 @@ window.addEventListener("beforeunload", () => {
   }
   cancelAnimationFrame(animationFrameId);
 });
+
+// Set initial mode selection
+document.getElementById("coopMode").classList.add("selected");

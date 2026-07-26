@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>Restaurant Empire 3D</title>
+  <title>🍔 Restaurant Empire 3D</title>
   <style>
     * {
       margin: 0;
@@ -14,14 +14,28 @@
       user-select: none;
     }
 
+    :root {
+      --primary: #667eea;
+      --secondary: #764ba2;
+      --success: #5ade7b;
+      --danger: #ff6b6b;
+      --warning: #ffa500;
+      --dark: #1a1a2e;
+      --light: #ffffff;
+      --bg: #0f3460;
+      --card: rgba(255, 255, 255, 0.95);
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+
     html, body {
       width: 100%;
       height: 100%;
       height: 100dvh;
       overflow: hidden;
-      background: #1a1a1a;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      color: #fff;
+      background: linear-gradient(135deg, var(--bg) 0%, #1e5b8b 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--dark);
     }
 
     #gameContainer {
@@ -29,262 +43,353 @@
       inset: 0;
       width: 100%;
       height: 100%;
+      z-index: 1;
     }
 
-    #ui {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      padding: 16px;
-      font-size: 14px;
-      z-index: 100;
-    }
-
-    .hud {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      pointer-events: auto;
-    }
-
-    .stat {
-      background: rgba(0, 0, 0, 0.7);
-      border: 2px solid #4a9eff;
-      border-radius: 8px;
-      padding: 8px 12px;
-      backdrop-filter: blur(8px);
-      font-weight: 600;
-    }
-
-    .stat-label {
-      font-size: 11px;
-      opacity: 0.8;
-      display: block;
-    }
-
-    .stat-value {
-      font-size: 16px;
-      font-weight: 700;
-    }
-
-    #mainMenu {
+    .screen {
       position: fixed;
       inset: 0;
-      background: linear-gradient(135deg, #0f3460 0%, #533483 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    #mainMenu.hidden {
       display: none;
+      flex-direction: column;
+      z-index: 100;
+      background: linear-gradient(135deg, var(--bg) 0%, #1e5b8b 100%);
+      padding: 20px;
+      overflow-y: auto;
     }
 
-    .menu-title {
-      font-size: 48px;
+    .screen.active {
+      display: flex;
+    }
+
+    .screen-title {
+      font-size: 28px;
       font-weight: 700;
+      color: var(--light);
       text-align: center;
-      margin-bottom: 20px;
-      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      margin-bottom: 30px;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
     }
 
-    .menu-subtitle {
-      font-size: 16px;
-      opacity: 0.9;
-      text-align: center;
-      margin-bottom: 40px;
+    .card {
+      background: var(--card);
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
     }
 
-    .menu-button {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: 3px solid #fff;
+    .button-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 16px;
+      border: none;
       border-radius: 12px;
-      padding: 16px 40px;
       font-size: 16px;
       font-weight: 600;
-      color: #fff;
       cursor: pointer;
-      min-width: 200px;
       transition: all 0.3s ease;
-      pointer-events: auto;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      color: var(--light);
     }
 
-    .menu-button:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    .btn:active {
+      transform: scale(0.98);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
-    .menu-button:active {
-      transform: translateY(-2px);
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
     }
 
-    #inputName {
-      background: rgba(255, 255, 255, 0.1);
-      border: 2px solid #667eea;
-      border-radius: 8px;
-      padding: 12px;
+    .btn-success {
+      background: linear-gradient(135deg, var(--success) 0%, #2ecc71 100%);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger) 0%, #ff5252 100%);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--warning) 0%, #ff8c42 100%);
+    }
+
+    .btn-small {
+      padding: 12px 16px;
       font-size: 14px;
-      color: #fff;
-      width: 200px;
-      text-align: center;
+      border-radius: 10px;
     }
 
-    #inputName::placeholder {
-      color: rgba(255, 255, 255, 0.5);
-    }
-
-    #roomList {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 12px;
-      max-height: 60vh;
-      overflow-y: auto;
+    input[type="text"] {
       width: 100%;
+      padding: 14px;
+      border: 2px solid var(--primary);
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 15px;
+      background: var(--card);
+      color: var(--dark);
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--secondary);
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .input-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 5px;
+      display: block;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .room-card {
-      background: rgba(0, 0, 0, 0.3);
-      border: 2px solid #667eea;
+      background: var(--card);
       border-radius: 12px;
       padding: 16px;
+      margin-bottom: 12px;
+      border-left: 4px solid var(--primary);
+      box-shadow: var(--shadow);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       cursor: pointer;
       transition: all 0.3s ease;
-      pointer-events: auto;
     }
 
-    .room-card:hover {
-      background: rgba(102, 126, 234, 0.2);
-      transform: translateY(-2px);
-    }
-
-    .room-code {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 8px;
+    .room-card:active {
+      transform: translateX(2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
     }
 
     .room-info {
+      flex: 1;
+    }
+
+    .room-code {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--dark);
+      margin-bottom: 4px;
+    }
+
+    .room-details {
       font-size: 12px;
-      opacity: 0.8;
+      color: #999;
     }
 
-    #gameUI {
-      display: none;
-    }
-
-    #gameUI.active {
-      display: flex;
-    }
-
-    .bottom-controls {
-      margin-top: auto;
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-      pointer-events: auto;
-    }
-
-    .control-button {
-      background: rgba(0, 0, 0, 0.7);
-      border: 2px solid #4a9eff;
+    .room-action {
+      background: var(--primary);
+      color: var(--light);
+      border: none;
       border-radius: 8px;
-      padding: 12px 16px;
-      color: #fff;
+      padding: 8px 16px;
       font-weight: 600;
       cursor: pointer;
+      font-size: 12px;
       transition: all 0.2s ease;
     }
 
-    .control-button:active {
-      background: rgba(74, 158, 255, 0.3);
+    .room-action:active {
       transform: scale(0.95);
     }
 
-    .joystick-container {
+    .mode-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .mode-button {
+      padding: 24px;
+      border: 3px solid #ddd;
+      border-radius: 12px;
+      background: var(--card);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .mode-button.selected {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+      box-shadow: 0 0 0 2px var(--primary);
+    }
+
+    .mode-emoji {
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+
+    .mode-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--dark);
+      margin-bottom: 4px;
+    }
+
+    .mode-description {
+      font-size: 11px;
+      color: #999;
+    }
+
+    .player-list {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 15px;
+      box-shadow: var(--shadow);
+    }
+
+    .player-item {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .player-item:last-child {
+      border-bottom: none;
+    }
+
+    .player-icon {
+      font-size: 24px;
+      margin-right: 12px;
+    }
+
+    .player-name {
+      flex: 1;
+    }
+
+    .player-level {
+      background: var(--primary);
+      color: var(--light);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      z-index: 10;
+      display: none;
+    }
+
+    .hud.active {
+      display: grid;
+    }
+
+    .hud-item {
+      background: rgba(0, 0, 0, 0.7);
+      border: 2px solid var(--primary);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      color: var(--light);
+    }
+
+    .hud-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .hud-value {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .game-ui {
       position: fixed;
       bottom: 20px;
       left: 20px;
-      width: 120px;
-      height: 120px;
-      background: rgba(0, 0, 0, 0.5);
-      border: 2px solid #4a9eff;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-    }
-
-    .joystick-knob {
-      width: 60px;
-      height: 60px;
-      background: radial-gradient(circle at 30% 30%, #667eea, #764ba2);
-      border-radius: 50%;
-      position: relative;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    }
-
-    .action-buttons {
-      position: fixed;
-      bottom: 20px;
       right: 20px;
-      display: flex;
+      display: none;
       flex-direction: column;
       gap: 12px;
-      z-index: 50;
+      z-index: 10;
     }
 
-    .action-button {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: 2px solid #fff;
-      color: #fff;
-      font-size: 24px;
-      font-weight: 700;
-      cursor: pointer;
+    .game-ui.active {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      pointer-events: auto;
     }
 
-    .action-button:active {
-      transform: scale(0.9);
-      box-shadow: 0 0 15px rgba(102, 126, 234, 0.6);
-    }
-
-    .chat-box {
-      position: fixed;
-      bottom: 140px;
-      right: 20px;
+    .game-timer {
       background: rgba(0, 0, 0, 0.8);
-      border: 2px solid #4a9eff;
-      border-radius: 8px;
-      padding: 12px;
-      width: 250px;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 50;
-      pointer-events: auto;
+      border: 2px solid var(--warning);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      color: var(--light);
+      font-size: 32px;
+      font-weight: 700;
     }
 
-    .chat-message {
-      font-size: 12px;
-      margin-bottom: 6px;
-      word-wrap: break-word;
+    .game-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
     }
 
-    .chat-message .player-name {
+    .action-btn {
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
       font-weight: 600;
-      color: #667eea;
+      cursor: pointer;
+      color: var(--light);
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .action-btn:active {
+      transform: scale(0.95);
+    }
+
+    .action-btn-cook {
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b9d 100%);
+    }
+
+    .action-btn-serve {
+      background: linear-gradient(135deg, var(--success) 0%, #2ecc71 100%);
+    }
+
+    .action-btn-pause {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .action-btn-leave {
+      background: linear-gradient(135deg, var(--danger) 0%, #ff5252 100%);
     }
 
     .loading {
@@ -296,18 +401,19 @@
       justify-content: center;
       flex-direction: column;
       gap: 16px;
-      z-index: 2000;
-    }
-
-    .loading.hidden {
+      z-index: 1000;
       display: none;
     }
 
+    .loading.active {
+      display: flex;
+    }
+
     .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid rgba(102, 126, 234, 0.3);
-      border-top-color: #667eea;
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(102, 126, 234, 0.2);
+      border-top-color: var(--primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
@@ -316,18 +422,68 @@
       to { transform: rotate(360deg); }
     }
 
-    @media (max-width: 600px) {
-      .menu-title {
-        font-size: 32px;
+    .loading-text {
+      color: var(--light);
+      font-weight: 600;
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: var(--light);
+      padding: 14px 20px;
+      border-radius: 10px;
+      border-left: 4px solid var(--primary);
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    .score-display {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 15px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .score-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #999;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .score-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    @media (max-height: 700px) {
+      .screen-title {
+        font-size: 22px;
+        margin-bottom: 20px;
+      }
+      
+      .card {
+        padding: 16px;
+        margin-bottom: 12px;
       }
 
-      .menu-button {
-        min-width: 160px;
-        padding: 12px 24px;
-      }
-
-      #roomList {
-        grid-template-columns: 1fr;
+      .btn {
+        padding: 12px;
+        font-size: 14px;
       }
     }
   </style>
@@ -336,78 +492,182 @@
   <!-- 3D Game Container -->
   <div id="gameContainer"></div>
 
-  <!-- UI Layer -->
-  <div id="ui">
-    <div id="gameUI">
-      <div class="hud">
-        <div class="stat">
-          <span class="stat-label">Level</span>
-          <span class="stat-value" id="levelDisplay">1</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Money</span>
-          <span class="stat-value" id="moneyDisplay">$0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">XP</span>
-          <span class="stat-value" id="xpDisplay">0%</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Customers</span>
-          <span class="stat-value" id="customersDisplay">0/10</span>
-        </div>
+  <!-- MAIN MENU SCREEN -->
+  <div id="mainMenu" class="screen active">
+    <h1 class="screen-title">🍔 Restaurant Empire 3D</h1>
+    
+    <div class="card" style="text-align: center; margin-bottom: 25px;">
+      <p style="font-size: 14px; color: #666; line-height: 1.6;">
+        Welcome to Restaurant Empire! Build your culinary empire, unlock new restaurants, and compete with friends.
+      </p>
+    </div>
+
+    <label class="input-label">Your Name</label>
+    <input type="text" id="playerName" placeholder="Enter your name" maxlength="20" value="">
+
+    <button class="btn btn-primary" id="hostBtn" style="margin-bottom: 10px;">
+      🏠 CREATE GAME
+    </button>
+    <button class="btn btn-success" id="joinBtn">
+      👥 JOIN GAME
+    </button>
+  </div>
+
+  <!-- MODE SELECTION SCREEN (for host) -->
+  <div id="modeScreen" class="screen">
+    <h1 class="screen-title">Choose Game Mode</h1>
+
+    <div class="card">
+      <p style="font-size: 13px; color: #666; margin-bottom: 20px; text-align: center;">
+        Select how you want to play with your friends
+      </p>
+    </div>
+
+    <div class="mode-selector">
+      <div class="mode-button" id="coopMode">
+        <div class="mode-emoji">🤝</div>
+        <div class="mode-name">CO-OP</div>
+        <div class="mode-description">Work together & combine scores</div>
+      </div>
+      <div class="mode-button" id="versusMode">
+        <div class="mode-emoji">⚔️</div>
+        <div class="mode-name">VERSUS</div>
+        <div class="mode-description">Compete for the highest score</div>
       </div>
     </div>
 
-    <div class="bottom-controls">
-      <button class="control-button" id="pauseBtn">⏸ Pause</button>
-      <button class="control-button" id="leaveBtn">❌ Leave</button>
+    <div class="card">
+      <label class="input-label">Starting Level</label>
+      <input type="number" id="levelInput" value="1" min="1" max="100">
+    </div>
+
+    <button class="btn btn-primary" id="confirmModeBtn">
+      ✓ CONFIRM & CREATE ROOM
+    </button>
+    <button class="btn btn-danger btn-small" id="backToMenuBtn" style="margin-top: 10px;">
+      ← BACK
+    </button>
+  </div>
+
+  <!-- ROOM BROWSER SCREEN (for joining) -->
+  <div id="browserScreen" class="screen">
+    <h1 class="screen-title">Available Rooms</h1>
+
+    <div id="roomList" style="flex: 1; overflow-y: auto; margin-bottom: 15px;">
+      <!-- Rooms will be populated here -->
+    </div>
+
+    <button class="btn btn-primary" id="refreshBtn" style="margin-bottom: 10px;">
+      🔄 REFRESH ROOMS
+    </button>
+    <button class="btn btn-danger" id="backFromBrowserBtn">
+      ← BACK TO MENU
+    </button>
+  </div>
+
+  <!-- WAITING ROOM SCREEN -->
+  <div id="waitingRoom" class="screen">
+    <h1 class="screen-title" id="roomCodeDisplay">Room: XXXX</h1>
+
+    <div class="card">
+      <p style="font-size: 13px; color: #666; text-align: center;">
+        Share this code with friends to join your game
+      </p>
+    </div>
+
+    <div class="card">
+      <label class="input-label">Game Mode</label>
+      <p style="font-size: 16px; font-weight: 600; color: var(--primary);" id="modeDisplay">—</p>
+    </div>
+
+    <div class="card">
+      <label class="input-label">Players in Room</label>
+      <div id="playerListDisplay" class="player-list">
+        <!-- Players will be listed here -->
+      </div>
+    </div>
+
+    <button class="btn btn-success" id="startGameBtn">
+      🎮 START GAME
+    </button>
+    <button class="btn btn-danger" id="leaveRoomBtn">
+      ✕ LEAVE ROOM
+    </button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="gameScreen" class="screen">
+    <!-- HUD -->
+    <div id="hud" class="hud">
+      <div class="hud-item">
+        <div class="hud-label">Level</div>
+        <div class="hud-value" id="hudLevel">1</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">Team Score</div>
+        <div class="hud-value" id="hudScore">0</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">Customers</div>
+        <div class="hud-value" id="hudCustomers">0/10</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">Time</div>
+        <div class="hud-value" id="hudTime">60</div>
+      </div>
+    </div>
+
+    <!-- Game UI -->
+    <div id="gameUI" class="game-ui">
+      <div class="game-timer">
+        <span id="gameTimer">60</span>s
+      </div>
+
+      <div class="game-buttons">
+        <button class="action-btn action-btn-cook" id="cookBtn">🍳 COOK</button>
+        <button class="action-btn action-btn-serve" id="serveBtn">🍽️ SERVE</button>
+      </div>
+
+      <div class="game-buttons">
+        <button class="action-btn action-btn-pause" id="pauseBtn">⏸ PAUSE</button>
+        <button class="action-btn action-btn-leave" id="leaveGameBtn">✕ LEAVE</button>
+      </div>
     </div>
   </div>
 
-  <!-- Main Menu -->
-  <div id="mainMenu">
-    <div class="menu-title">🍔 Restaurant Empire 3D</div>
-    <div class="menu-subtitle">Real-time 3D Multiplayer Restaurant Simulator</div>
-    
-    <input type="text" id="inputName" placeholder="Enter your name" maxlength="20">
-    
-    <div id="menuButtons">
-      <button class="menu-button" id="hostBtn">🏠 Host Game</button>
-      <button class="menu-button" id="joinBtn">👥 Join Game</button>
+  <!-- GAME OVER SCREEN -->
+  <div id="gameOverScreen" class="screen">
+    <h1 class="screen-title">🏁 Game Over!</h1>
+
+    <div class="score-display">
+      <div class="score-label">Final Score</div>
+      <div class="score-value" id="finalScore">0</div>
     </div>
 
-    <div id="roomListContainer" style="display: none; width: 90%; max-width: 600px;">
-      <h3 style="margin-bottom: 16px;">Available Rooms</h3>
-      <div id="roomList"></div>
-      <button class="menu-button" id="backBtn" style="margin-top: 16px;">← Back</button>
+    <div id="resultsCard" class="card">
+      <!-- Game results will be displayed here -->
     </div>
+
+    <button class="btn btn-primary" id="playAgainBtn">
+      🎮 PLAY AGAIN
+    </button>
+    <button class="btn btn-success" id="mainMenuBtn">
+      🏠 MAIN MENU
+    </button>
   </div>
 
-  <!-- Loading Indicator -->
-  <div id="loading" class="loading hidden">
+  <!-- LOADING SCREEN -->
+  <div id="loading" class="loading">
     <div class="spinner"></div>
-    <div>Connecting...</div>
+    <div class="loading-text" id="loadingText">Connecting...</div>
   </div>
 
-  <!-- Mobile Joystick -->
-  <div id="joystickContainer" class="joystick-container" style="display: none;">
-    <div class="joystick-knob"></div>
-  </div>
-
-  <!-- Action Buttons -->
-  <div id="actionButtons" class="action-buttons" style="display: none;">
-    <button class="action-button" id="cookBtn" title="Cook">🍳</button>
-    <button class="action-button" id="serveBtn" title="Serve">🍽️</button>
-    <button class="action-button" id="cleanBtn" title="Clean">🧹</button>
-  </div>
-
-  <!-- Chat Box -->
-  <div id="chatBox" class="chat-box" style="display: none;"></div>
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast" class="toast"></div>
 
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  <script src="game.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.js"></script>
+  <script src="/game.js"></script>
 </body>
 </html>
