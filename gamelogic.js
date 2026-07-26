@@ -619,7 +619,20 @@ function snapshot(match) {
     dirty: match.dirty.map((d) => ({ id: d.id, table: d.table, slot: d.slot })),
     kitchens: Object.keys(match.kitchens).reduce((a, pid) => {
       const k = match.kitchens[pid];
-      a[pid] = { clean: k.clean, max: k.max, washing: k.washing.length };
+      // ship the wash timings so the player can see how long until the next
+      // clean plate lands, both in the HUD and above the sink
+      let next = null, prog = 0;
+      k.washing.forEach((w) => {
+        if (next === null || w.remaining < next) {
+          next = w.remaining;
+          prog = clamp(1 - w.remaining / (w.total || 1), 0, 1);
+        }
+      });
+      a[pid] = {
+        clean: k.clean, max: k.max, washing: k.washing.length,
+        nextIn: next === null ? null : Math.round(next * 10) / 10,
+        nextProgress: Math.round(prog * 100) / 100,
+      };
       return a;
     }, {}),
     customers: match.customers.map((c) => ({
