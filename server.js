@@ -4,10 +4,16 @@ const socketIo = require("socket.io");
 const path = require("path");
 const fs = require("fs");
 
-const app = express(); 
+const app = express();
 const server = http.createServer(app);
+
+// ===== SOCKET.IO WITH CORS FIX =====
 const io = socketIo(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: false
+  },
   transports: ["websocket", "polling"],
   pingInterval: 25000,
   pingTimeout: 60000,
@@ -29,7 +35,7 @@ const RESTAURANTS = [
   { id: 6, name: "Steakhouse", emoji: "🥩", levelRange: [61, 70], customers: 5 },
   { id: 7, name: "Italian Kitchen", emoji: "🍝", levelRange: [71, 80], customers: 7 },
   { id: 8, name: "Luxury Buffet", emoji: "🍽️", levelRange: [81, 90], customers: 10 },
-  { id: 9, name: "Five-Star", emoji: "👨‍🍳", levelRange: [91, 100], customers: 6 },
+  { id: 9, name: "Five-Star", emoji: "👨", levelRange: [91, 100], customers: 6 },
 ];
 
 const RECIPES = {
@@ -41,8 +47,6 @@ const RECIPES = {
   fish: { name: "Fish", emoji: "🐟", time: 11, ingredients: ["fish", "oil", "lemon"], points: 115 },
   steak: { name: "Steak", emoji: "🥩", time: 14, ingredients: ["beef", "butter", "salt"], points: 140 },
   pasta: { name: "Pasta", emoji: "🍝", time: 9, ingredients: ["pasta", "sauce", "cheese"], points: 105 },
-  buffet: { name: "Buffet", emoji: "🍽️", time: 20, ingredients: ["rice", "meat", "veggies"], points: 150 },
-  gourmet: { name: "Gourmet", emoji: "👨‍🍳", time: 25, ingredients: ["prime", "truffle", "gold"], points: 200 },
 };
 
 // ===== STATE MANAGEMENT =====
@@ -52,7 +56,11 @@ const database = { players: {} };
 
 // ===== UTILITY FUNCTIONS =====
 function saveDatabase() {
-  fs.writeFileSync(DATABASE_URL, JSON.stringify(database, null, 2));
+  try {
+    fs.writeFileSync(DATABASE_URL, JSON.stringify(database, null, 2));
+  } catch (e) {
+    console.error("Database save error:", e.message);
+  }
 }
 
 function loadDatabase() {
@@ -90,12 +98,16 @@ function pointsForRecipe(recipe) {
   return RECIPES[recipe]?.points || 50;
 }
 
-// ===== EXPRESS MIDDLEWARE & ROUTES =====
+// ===== EXPRESS ROUTES =====
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.get("/health", (req, res) => {
-  res.json({ status: "Restaurant Empire 3D server is running", uptime: process.uptime() });
+  res.json({ status: "Restaurant Empire 3D running", uptime: process.uptime() });
 });
 
 app.get("/api/restaurants", (req, res) => {
@@ -130,7 +142,6 @@ app.post("/api/player/:id/save", (req, res) => {
 io.on("connection", (socket) => {
   console.log(`[Connection] Player connected: ${socket.id}`);
 
-  // Player joined
   socket.on("join_game", (playerData) => {
     players.set(socket.id, {
       id: socket.id,
@@ -144,7 +155,6 @@ io.on("connection", (socket) => {
       rotation: { x: 0, y: 0, z: 0 },
     });
 
-    // Load persistent data
     if (database.players[socket.id]) {
       const saved = database.players[socket.id];
       players.get(socket.id).level = saved.level;
@@ -157,7 +167,6 @@ io.on("connection", (socket) => {
     console.log(`[Joined] ${players.get(socket.id).name} (Total: ${players.size})`);
   });
 
-  // Create room (lobby)
   socket.on("create_room", (options) => {
     const roomCode = generateRoomCode();
     const room = {
@@ -180,7 +189,6 @@ io.on("connection", (socket) => {
     console.log(`[Room] Created ${roomCode} by ${players.get(socket.id).name}`);
   });
 
-  // Join room
   socket.on("join_room", (roomCode) => {
     const room = rooms.get(roomCode);
     if (!room) {
@@ -202,7 +210,6 @@ io.on("connection", (socket) => {
     console.log(`[Room] ${players.get(socket.id).name} joined ${roomCode}`);
   });
 
-  // Start game
   socket.on("start_game", (roomCode) => {
     const room = rooms.get(roomCode);
     if (!room || room.host !== socket.id) {
@@ -235,7 +242,6 @@ io.on("connection", (socket) => {
 
     console.log(`[Game] Started in ${roomCode}: Level ${room.level}, ${maxCustomers} customers`);
 
-    // Game loop
     const gameInterval = setInterval(() => {
       if (!room.gameState) {
         clearInterval(gameInterval);
@@ -243,7 +249,6 @@ io.on("connection", (socket) => {
       }
 
       room.gameState.timeRemaining = Math.max(0, room.gameState.timeRemaining - 1);
-
       io.to(`room_${roomCode}`).emit("game_update", { gameState: room.gameState });
 
       if (room.gameState.timeRemaining === 0) {
@@ -255,7 +260,6 @@ io.on("connection", (socket) => {
     }, 1000);
   });
 
-  // Player position update (continuous sync)
   socket.on("player_position", (data) => {
     const player = players.get(socket.id);
     if (player) {
@@ -265,26 +269,16 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Player interaction (cooking, ordering, etc.)
   socket.on("player_action", (data) => {
     const room = rooms.get(data.roomCode);
     if (!room) return;
 
-    const action = {
-      playerId: socket.id,
-      type: data.type,
-      recipe: data.recipe,
-      timestamp: Date.now(),
-    };
-
-    // Award points based on action type
     const player = players.get(socket.id);
     if (player && data.type === "complete_order") {
       const points = pointsForRecipe(data.recipe);
       player.money += Math.floor(points * 1.2);
       player.xp += Math.floor(points * 0.5);
 
-      // Check level up
       if (player.xp >= player.level * 500) {
         player.level += 1;
         player.xp = 0;
@@ -300,15 +294,13 @@ io.on("connection", (socket) => {
         level: player.level,
         xp: player.xp,
         money: player.money,
-        restaurant: 0,
       };
       saveDatabase();
     }
 
-    io.to(`room_${data.roomCode}`).emit("room_action", action);
+    io.to(`room_${data.roomCode}`).emit("room_action", { playerId: socket.id, type: data.type, recipe: data.recipe });
   });
 
-  // Chat message
   socket.on("chat_message", (data) => {
     const player = players.get(socket.id);
     if (!player) return;
@@ -321,23 +313,25 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Disconnect
   socket.on("disconnect", () => {
+    console.log(`[Disconnect] Player removed. Online: ${players.size - 1}`);
     players.delete(socket.id);
 
-    // Clean up empty rooms
     for (const [code, room] of rooms.entries()) {
       room.players = room.players.filter((id) => id !== socket.id);
       if (room.players.length === 0) {
         rooms.delete(code);
       } else if (room.host === socket.id) {
-        room.host = room.players[0]; // Reassign host
+        room.host = room.players[0];
       }
     }
 
     io.emit("players_online", players.size);
     io.emit("rooms_updated", Array.from(rooms.values()));
-    console.log(`[Disconnect] Player removed. Online: ${players.size}`);
+  });
+
+  socket.on("error", (error) => {
+    console.error("Socket error:", error);
   });
 });
 
