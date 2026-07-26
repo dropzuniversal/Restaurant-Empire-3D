@@ -40,6 +40,7 @@ function blankProfile(name) {
     lifetime: 0,
     best: 1,
     shifts: 0,
+    gender: "male",
     upgrades: { stove: 0, pass: 0, burner: 0, shoes: 0, charm: 0, chairs: 0 },
   };
 }
@@ -86,6 +87,7 @@ function profilePayload(pkey) {
     best: pr.best,
     shifts: pr.shifts,
     upgrades: pr.upgrades,
+    gender: pr.gender || "male",
     shop: G.shopFor(pr.upgrades),
   };
 }
@@ -160,10 +162,12 @@ function leaveRoom(socket) {
 function startMatch(room) {
   const upgrades = {};
   const names = {};
+  const genders = {};
   room.players.forEach((id) => {
     const p = players.get(id);
     const pr = p && profiles.get(p.pkey);
     upgrades[id] = pr ? pr.upgrades : {};
+    genders[id] = (pr && pr.gender) || "male";
     names[id] = p ? p.name : "Cook";
   });
   room.names = names;
@@ -172,7 +176,7 @@ function startMatch(room) {
     level: room.level,
     mode: room.mode,
     playerIds: room.players.slice(),
-    upgrades,
+    upgrades, genders,
     fast: FAST_MODE,
   });
 
@@ -243,6 +247,7 @@ io.on("connection", (socket) => {
     if (!profiles.has(pkey)) profiles.set(pkey, blankProfile(name));
     const pr = profiles.get(pkey);
     pr.name = name;
+    if (d.gender === "male" || d.gender === "female") pr.gender = d.gender;
 
     players.set(socket.id, { id: socket.id, pkey, name, room: null });
     socket.emit("welcome", { id: socket.id, name });
@@ -367,11 +372,40 @@ io.on("connection", (socket) => {
     if (!r.ok) socket.emit("nope", r);
   });
 
-  socket.on("discard", () => {
+  socket.on("toss", (d = {}) => {
     const p = players.get(socket.id);
     const room = p && rooms.get(p.room);
     if (!room || !room.match) return;
-    G.discard(room.match, socket.id);
+    const r = G.toss(room.match, socket.id, d.index);
+    if (!r.ok) socket.emit("nope", r);
+  });
+
+  socket.on("bus", (d = {}) => {
+    const p = players.get(socket.id);
+    const room = p && rooms.get(p.room);
+    if (!room || !room.match) return;
+    const r = G.busTable(room.match, socket.id, parseInt(d.seat, 10));
+    if (!r.ok) socket.emit("nope", r);
+  });
+
+  socket.on("wash", () => {
+    const p = players.get(socket.id);
+    const room = p && rooms.get(p.room);
+    if (!room || !room.match) return;
+    const r = G.dropAtSink(room.match, socket.id);
+    if (!r.ok) socket.emit("nope", r);
+  });
+
+  /** Anyone in the kitchen can freeze the shift for everyone. */
+  socket.on("pause", (d = {}) => {
+    const p = players.get(socket.id);
+    const room = p && rooms.get(p.room);
+    if (!room || !room.match) return;
+    G.setPause(room.match, socket.id, !!d.on, p.name);
+    io.to("room:" + room.code).emit("state", {
+      snapshot: G.snapshot(room.match),
+      events: G.drainEvents(room.match),
+    });
   });
 
   socket.on("disconnect", () => {

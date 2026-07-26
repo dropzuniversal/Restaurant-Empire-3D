@@ -157,11 +157,23 @@ const UPGRADES = {
   burner: { name: "Extra Burner",  emoji: "🍳", max: 2, cost: (l) => 700 + l * 900,
             blurb: (l) => `Cook ${l + 2} dishes at the same time` },
   shoes:  { name: "Better Shoes",  emoji: "👟", max: 4, cost: (l) => 180 + l * 200,
-            blurb: (l) => `Move ${Math.round(((1 + (l + 1) * 0.16) - 1) * 100)}% faster` },
+            blurb: (l) => `Move ${Math.round((l + 1) * 16)}% faster` },
   charm:  { name: "Table Charm",   emoji: "💛", max: 4, cost: (l) => 250 + l * 280,
             blurb: (l) => `Earn ${Math.round((l + 1) * 30)}% bigger tips` },
   chairs: { name: "Comfier Chairs",emoji: "🪑", max: 4, cost: (l) => 260 + l * 300,
             blurb: (l) => `Customers wait ${Math.round((l + 1) * 10)}% longer` },
+  crockery:{name: "More Crockery", emoji: "🍶", max: 3, cost: (l) => 340 + l * 400,
+            blurb: (l) => `${8 + (l + 1) * 3} clean plates in service` },
+  sink:   { name: "Faster Sink",   emoji: "🚰", max: 3, cost: (l) => 300 + l * 340,
+            blurb: (l) => `Wash-up ${Math.round((1 - Math.pow(0.75, l + 1)) * 100)}% quicker` },
+
+  // --- the big one
+  helper: { name: "Hire a Server", emoji: "🧑‍🍳", max: 1, cost: () => 2000, hire: true,
+            blurb: () => "A second pair of hands who cooks, serves and buses on their own" },
+  helperSpeed: { name: "Server: Trainers", emoji: "🏃", max: 3, cost: (l) => 900 + l * 1100, needs: "helper",
+            blurb: (l) => `Your server moves ${Math.round((l + 1) * 20)}% faster` },
+  helperSkill: { name: "Server: Training", emoji: "📋", max: 3, cost: (l) => 1200 + l * 1400, needs: "helper",
+            blurb: (l) => `Server cooks ${Math.round((1 - Math.pow(0.85, l + 1)) * 100)}% faster, carries ${1 + l + 1}` },
 };
 
 function venueForLevel(level) {
