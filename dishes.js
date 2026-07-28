@@ -168,7 +168,7 @@ const UPGRADES = {
             blurb: (l) => `Wash-up ${Math.round((1 - Math.pow(0.75, l + 1)) * 100)}% quicker` },
 
   // --- the big one
-  helper: { name: "Hire a Server", emoji: "🧑‍🍳", max: 1, cost: () => 2000, hire: true,
+  helper: { name: "Hire a Server", emoji: "🧑‍🍳", max: 1, cost: () => 20, hire: true,
             blurb: () => "A second pair of hands who cooks, serves and buses on their own" },
   helperSpeed: { name: "Server: Trainers", emoji: "🏃", max: 3, cost: (l) => 900 + l * 1100, needs: "helper",
             blurb: (l) => `Your server moves ${Math.round((l + 1) * 20)}% faster` },
